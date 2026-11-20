@@ -4,7 +4,7 @@
   "description": "Arabic Discord community bot with leveling, wallet, shop and stats",
   "main": "src/index.js",
   "scripts": { "start": "node src/index.js" },
-  "engines": { "node": ">=22.12.0" },
+  "engines": { "node": "20.x" },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
     "better-sqlite3": "^12.4.1",
