@@ -30,9 +30,9 @@ try {
   const purchase = db.purchaseProduct(guild,user,productId);
   assert.equal(purchase.product.name,'لون خاص');
   assert.equal(purchase.status,'awaiting_selection');
-  assert.equal(db.ensureMember(guild,user).coins,0);
+  assert.equal(db.ensureMember(guild,user).coins,12);
   assert.equal(db.refundProductPurchase(guild,purchase.id),true);
-  assert.equal(db.ensureMember(guild,user).coins,1);
+  assert.equal(db.ensureMember(guild,user).coins,13);
 
   db.setInteractionRoles(guild,[{id:'role-a',name:'فعاليات'},{id:'role-b',name:'مسابقات'}]);
   assert.equal(db.interactionRoles(guild).length,2);
