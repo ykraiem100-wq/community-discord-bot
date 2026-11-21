@@ -29,8 +29,8 @@ const DEFAULT_CONTENT = {
     body: 'تابع فعاليات DOS COMMUNITY وشارك في المسابقات والتحديات والأنشطة الجماعية.\n\nArena & Events'
   },
   main: {
-    title: '👑 DOS COMMUNITY',
-    body: 'أهلاً بك في مجتمع DOS! استخدم الأزرار بالأسفل لعرض القوانين والمعلومات والأنظمة.\nWelcome to DOS COMMUNITY.'
+    title: 'مرحباً بك في مجتمع DOS COMMUNITY',
+    body: 'هنا تجد جميع الأنظمة والقوانين، يمكنك تفعيل رتب التفاعل، ومعرفة نظام السيرفر والمشاركة في الفعاليات.'
   }
 };
 
@@ -97,7 +97,12 @@ async function handlePublicPanelInteraction(interaction) {
           xpPerCoin: database.getConfig(interaction.guildId, 'xp_per_coin', '250')
         })
       : await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • ' + action.toUpperCase() });
-    return interaction.reply({ files: [new AttachmentBuilder(image, { name: 'dos-' + action + '.png' })], flags: MessageFlags.Ephemeral });
+    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(String(item.body || '').slice(0, 4096));
+    return interaction.reply({
+      embeds: [contentEmbed],
+      files: [new AttachmentBuilder(image, { name: 'dos-' + action + '.png' })],
+      flags: MessageFlags.Ephemeral
+    });
   }
   if (scope === 'public' && action === 'notifications') {
     if (!database.featureEnabled(interaction.guildId, 'interaction_roles')) {
@@ -111,7 +116,8 @@ async function handlePublicPanelInteraction(interaction) {
       .addOptions(roles.map((row) => ({ label: row.role_name.slice(0, 100), value: row.role_id, default: current.has(row.role_id) })));
     const item = content(interaction.guildId, 'notifications');
     const image = await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • NOTIFICATIONS' });
-    return interaction.reply({ files: [new AttachmentBuilder(image, { name: 'dos-notifications.png' })], components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
+    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(String(item.body || '').slice(0, 4096));
+    return interaction.reply({ embeds: [contentEmbed], files: [new AttachmentBuilder(image, { name: 'dos-notifications.png' })], components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
   }
   if (scope === 'notify' && action === 'select' && interaction.isStringSelectMenu()) {
     const managed = database.interactionRoles(interaction.guildId).map((row) => row.role_id);

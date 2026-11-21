@@ -41,7 +41,10 @@ db.exec(
   'CREATE TABLE IF NOT EXISTS interaction_roles (guild_id TEXT NOT NULL, role_id TEXT NOT NULL, role_name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(guild_id,role_id));' +
   'CREATE TABLE IF NOT EXISTS xp_events (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, user_id TEXT NOT NULL, event_type TEXT NOT NULL, amount INTEGER NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()));' +
   'CREATE INDEX IF NOT EXISTS idx_xp_events_guild_date ON xp_events(guild_id,created_at);' +
-  'CREATE TABLE IF NOT EXISTS admin_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, user_id TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL DEFAULT \'\', created_at INTEGER NOT NULL DEFAULT (unixepoch()));'
+  'CREATE TABLE IF NOT EXISTS admin_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, user_id TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL DEFAULT \'\', created_at INTEGER NOT NULL DEFAULT (unixepoch()));' +
+  'CREATE TABLE IF NOT EXISTS invite_snapshots (guild_id TEXT NOT NULL, code TEXT NOT NULL, inviter_id TEXT, uses INTEGER NOT NULL DEFAULT 0, max_uses INTEGER NOT NULL DEFAULT 0, expires_at INTEGER, updated_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,code));' +
+  'CREATE TABLE IF NOT EXISTS member_invites (guild_id TEXT NOT NULL, joined_user_id TEXT NOT NULL, inviter_id TEXT NOT NULL, invite_code TEXT NOT NULL, joined_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,joined_user_id));' +
+  'CREATE INDEX IF NOT EXISTS idx_member_invites_inviter ON member_invites(guild_id,inviter_id);'
 );
 
 // Additive migration for databases created by older versions.
@@ -78,7 +81,7 @@ const q = {
   totalTop: db.prepare('SELECT user_id,total_xp AS score FROM members WHERE guild_id=? ORDER BY score DESC LIMIT 10'),
   voiceTop: db.prepare('SELECT user_id,voice_xp AS score FROM members WHERE guild_id=? ORDER BY score DESC LIMIT 10'),
   coinTop: db.prepare('SELECT user_id,coins AS score FROM members WHERE guild_id=? ORDER BY score DESC LIMIT 10'),
-  stats: db.prepare('SELECT COUNT(*) AS members,COALESCE(SUM(messages),0) AS messages,COALESCE(SUM(voice_seconds),0) AS voice_seconds,COALESCE(SUM(coins),0) AS coins FROM members WHERE guild_id=?'),
+  stats: db.prepare('SELECT COUNT(*) AS members,COALESCE(SUM(messages),0) AS messages,COALESCE(SUM(voice_seconds),0) AS voice_seconds,COALESCE(SUM(coins),0) AS coins,COALESCE(SUM(total_xp),0) AS total_xp FROM members WHERE guild_id=?'),
   voiceGet: db.prepare('SELECT * FROM voice_sessions WHERE guild_id=? AND user_id=?'),
   voiceAll: db.prepare('SELECT * FROM voice_sessions'),
   voiceStart: db.prepare('INSERT OR REPLACE INTO voice_sessions(guild_id,user_id,started_at) VALUES(?,?,?)'),
@@ -292,6 +295,38 @@ function interactionRoles(guildId) { return db.prepare('SELECT * FROM interactio
 function logAdmin(guildId, userId, action, details) {
   db.prepare('INSERT INTO admin_audit(guild_id,user_id,action,details) VALUES(?,?,?,?)').run(guildId,userId,action,details || '');
 }
+
+function inviteSnapshots(guildId) {
+  return db.prepare('SELECT * FROM invite_snapshots WHERE guild_id=?').all(guildId);
+}
+function saveInviteSnapshots(guildId, invites) {
+  const rows = Array.from(invites || []).map((invite) => ({
+    code: String(invite.code || ''),
+    inviterId: invite.inviterId || (invite.inviter && invite.inviter.id) || null,
+    uses: Math.max(0, Math.floor(Number(invite.uses) || 0)),
+    maxUses: Math.max(0, Math.floor(Number(invite.maxUses) || 0)),
+    expiresAt: invite.expiresTimestamp ? Math.floor(Number(invite.expiresTimestamp) / 1000) : null
+  })).filter((invite) => invite.code);
+  const upsert = db.prepare('INSERT INTO invite_snapshots(guild_id,code,inviter_id,uses,max_uses,expires_at,updated_at) VALUES(?,?,?,?,?,?,unixepoch()) ON CONFLICT(guild_id,code) DO UPDATE SET inviter_id=COALESCE(excluded.inviter_id,invite_snapshots.inviter_id),uses=excluded.uses,max_uses=excluded.max_uses,expires_at=excluded.expires_at,updated_at=unixepoch()');
+  const tx = db.transaction(() => {
+    for (const invite of rows) upsert.run(guildId, invite.code, invite.inviterId, invite.uses, invite.maxUses, invite.expiresAt);
+  });
+  tx();
+  return rows.length;
+}
+function deleteInviteSnapshot(guildId, code) {
+  return db.prepare('DELETE FROM invite_snapshots WHERE guild_id=? AND code=?').run(guildId, String(code)).changes > 0;
+}
+function recordInviteJoin(guildId, joinedUserId, inviterId, inviteCode) {
+  if (!inviterId || !inviteCode) return false;
+  return db.prepare('INSERT OR IGNORE INTO member_invites(guild_id,joined_user_id,inviter_id,invite_code) VALUES(?,?,?,?)')
+    .run(guildId, joinedUserId, inviterId, String(inviteCode)).changes > 0;
+}
+function inviteCount(guildId, inviterId) {
+  const row = db.prepare('SELECT COUNT(*) AS count FROM member_invites WHERE guild_id=? AND inviter_id=?').get(guildId, inviterId);
+  return Number(row && row.count) || 0;
+}
+
 function pruneXpEvents() {
   return db.prepare('DELETE FROM xp_events WHERE created_at < unixepoch() - 45*86400').run().changes;
 }
@@ -332,5 +367,7 @@ module.exports = {
   purchaseProduct, getProductPurchase, updateProductPurchase, pendingProductPurchases, refundProductPurchase,
   setCustomColorRole, getCustomColorRole, createRoomRecord, activeRooms, getRoom,
   markRoomWarned, closeRoom, extendRoom, renewRoom, setInteractionRoles, interactionRoles,
-  logAdmin, pruneXpEvents, close: () => db.close()
+  logAdmin, pruneXpEvents,
+  inviteSnapshots, saveInviteSnapshots, deleteInviteSnapshot, recordInviteJoin, inviteCount,
+  close: () => db.close()
 };

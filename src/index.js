@@ -2,11 +2,11 @@
 require('dotenv').config();
 const {
   Client, GatewayIntentBits, Partials, EmbedBuilder, AttachmentBuilder,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, REST, Routes, MessageFlags
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, REST, Routes, MessageFlags, PermissionFlagsBits
 } = require('discord.js');
 const database = require('./database');
 const { createWalletImage } = require('./wallet');
-const { renderTopLeaderboard } = require('./render');
+const { renderTopLeaderboard, renderLevelUpBanner } = require('./render');
 const { shopPayload, handleShopInteraction, processRoomExpirations, colorPickerPayload } = require('./shop');
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
@@ -31,7 +31,7 @@ console.log('[DATABASE] ' + database.databasePath);
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers],
+    GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildInvites],
   partials: [Partials.Channel]
 });
 
@@ -65,6 +65,8 @@ function helpEmbed() {
     '/color-selection — استكمال اختيار اللون برقم الطلب إن تعذّر فتح الرسائل الخاصة',
     '.متصدرين كتابي / صوتي / عملات — ترتيب مختصر',
     '.إحصائيات — إحصائيات السيرفر',
+    '.دعواتي — عدد الأعضاء الذين انضموا من رابطك الشخصي',
+    '.رابط — إرسال رابط دعوة شخصي إلى الخاص',
     'للإدارة: /admin-panel — لوحة التحكم التفاعلية',
     'للإدارة: .تعيين_قناة متجر #قناة',
     'للإدارة: .رتبة_مستوى كتابة 10 @رتبة أو .رتبة_مستوى صوت 10 @رتبة'
@@ -73,11 +75,13 @@ function helpEmbed() {
 async function walletPayload(guild, user) {
   const guildId = guild.id;
   const profile = database.ensureMember(guildId, user.id);
+  const invites = database.inviteCount(guildId, user.id);
   const guildMember = guild.members.cache.get(user.id)
     || await guild.members.fetch(user.id).catch(() => null);
   const image = await createWalletImage(profile, user, guildId, guild, {
     text: database.memberRank(guildId, user.id, 'text'),
     voice: database.memberRank(guildId, user.id, 'voice'),
+    invites,
     displayName: guildMember ? guildMember.displayName : (user.globalName || user.username)
   });
   return { files: [image] };
@@ -87,7 +91,11 @@ async function topPayload(guild, kind, period) {
   const entries = await Promise.all(rows.slice(0, 10).map(async (row) => {
     let member = guild.members.cache.get(row.user_id);
     if (!member) member = await guild.members.fetch(row.user_id).catch(() => null);
-    return { name: member ? member.displayName : ('عضو ' + String(row.user_id).slice(-4)), score: Number(row.score || 0) };
+    return {
+      name: member ? member.displayName : ('عضو ' + String(row.user_id).slice(-4)),
+      score: Number(row.score || 0),
+      avatarURL: member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : null
+    };
   }));
   const image = await renderTopLeaderboard({ guild, entries, period, metric: kind });
   return { files: [new AttachmentBuilder(image, { name: 'dos-top.png' })] };
@@ -101,6 +109,14 @@ async function assignLevelRole(member, kind, level) {
   if (!role || !topRole || role.position >= topRole.position || member.roles.cache.has(role.id)) return;
   try { await member.roles.add(role,`Reached ${kind} level ${level}`); }
   catch (error) { console.error('[LEVEL ROLE]',error.message); }
+}
+async function sendLevelUpNotice(channel, user, level) {
+  if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return;
+  const image = await renderLevelUpBanner({ level });
+  await channel.send({
+    content: `🎉 مبروك ${user ? `<@${user.id}>` : ''}! وصلت إلى المستوى **${level}** في DOS COMMUNITY.`,
+    files: [new AttachmentBuilder(image, { name: 'dos-level-up.png' })]
+  }).catch((error) => console.warn('[LEVEL-UP] Could not send notice:', error.message));
 }
 async function awardVoice(guildId,userId) {
   const session = database.voice(guildId,userId);
@@ -118,6 +134,7 @@ async function awardVoice(guildId,userId) {
     let member = guild && guild.members.cache.get(userId);
     if (!member && guild) member = await guild.members.fetch(userId).catch(() => null);
     await assignLevelRole(member,'voice',result.newVoiceLevel);
+    if (member && guild && guild.systemChannel) await sendLevelUpNotice(guild.systemChannel, member.user, result.newVoiceLevel);
   }
 }
 async function handleCommand(message) {
@@ -131,6 +148,23 @@ async function handleCommand(message) {
       if (!database.featureEnabled(guildId,'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
       const user = message.mentions.users.first() || message.author;
       return message.reply(await walletPayload(message.guild,user));
+    }
+    if (command === 'دعواتي') {
+      const count = database.inviteCount(guildId, userId);
+      return message.reply({ embeds: [new EmbedBuilder().setColor(CYAN).setTitle('دعواتك • DOS COMMUNITY')
+        .setDescription(`تم تسجيل **${count.toLocaleString('en-US')}** عضو انضموا من روابط الدعوة التي تتبعها.`)
+        .setFooter({ text: 'يبدأ احتساب الدعوات بعد تشغيل التتبع ومنح البوت صلاحية إدارة السيرفر.' })] });
+    }
+    if (command === 'رابط') {
+      const botMember = message.guild.members.me;
+      if (!botMember || !message.channel.permissionsFor(botMember)?.has(PermissionFlagsBits.CreateInstantInvite)) return message.reply('البوت يحتاج صلاحية إنشاء دعوة في هذه القناة.');
+      const invite = await message.channel.createInvite({ maxAge: 0, maxUses: 0, unique: true, reason: `Personal invite for ${message.author.tag}` });
+      try {
+        await message.author.send(`رابط دعوتك الشخصي لسيرفر DOS COMMUNITY:\n${invite.url}`);
+        return message.reply('تم إرسال رابط دعوتك الشخصي برسالة خاصة.');
+      } catch (error) {
+        return message.reply(`تعذّر إرسال الخاص. هذا رابط دعوتك الشخصي: ${invite.url}`);
+      }
     }
     if (command === 'top' || command === 'متصدرين') {
       if (!database.featureEnabled(guildId,'top')) return message.reply('نظام TOP متوقف حالياً.');
@@ -195,7 +229,7 @@ async function handleSlashCommand(interaction) {
   const guildId = interaction.guildId;
   if (interaction.commandName === 'admin-panel') {
     if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
-    return interaction.reply({ ...await homePayload(interaction.guildId),flags:MessageFlags.Ephemeral });
+    return interaction.reply({ ...await homePayload(interaction.guild),flags:MessageFlags.Ephemeral });
   }
   if (interaction.commandName === 'wallet') {
     if (!database.featureEnabled(guildId,'economy')) return interaction.reply({content:'المحفظة متوقفة مؤقتاً.',flags:MessageFlags.Ephemeral});
@@ -222,9 +256,51 @@ async function handleSlashCommand(interaction) {
   }
 }
 
+async function refreshInviteSnapshots(guild) {
+  try {
+    const current = await guild.invites.fetch();
+    database.saveInviteSnapshots(guild.id, [...current.values()].map((invite) => ({
+      code: invite.code, inviterId: invite.inviter && invite.inviter.id,
+      uses: invite.uses, maxUses: invite.maxUses, expiresTimestamp: invite.expiresTimestamp
+    })));
+    return true;
+  } catch (error) {
+    console.warn(`[INVITES] Cannot read invites for ${guild.name}; grant Manage Server to enable tracking: ${error.message}`);
+    return false;
+  }
+}
+async function trackInviteJoin(member) {
+  if (!member || member.user.bot) return;
+  const guild = member.guild;
+  try {
+    const previous = new Map(database.inviteSnapshots(guild.id).map((row) => [row.code, row]));
+    const current = await guild.invites.fetch();
+    const used = [...current.values()].map((invite) => ({
+      invite,
+      previousUses: Number(previous.get(invite.code)?.uses || 0),
+      currentUses: Number(invite.uses || 0)
+    })).filter((item) => item.currentUses > item.previousUses)
+      .sort((a, b) => (b.currentUses - b.previousUses) - (a.currentUses - a.previousUses))[0];
+    const inviterId = used && ((used.invite.inviter && used.invite.inviter.id) || (previous.get(used.invite.code) && previous.get(used.invite.code).inviter_id));
+    if (used && inviterId) {
+      database.recordInviteJoin(guild.id, member.id, inviterId, used.invite.code);
+      console.log(`[INVITES] ${member.user.tag} joined via ${used.invite.code} (inviter ${inviterId}).`);
+    } else {
+      console.log(`[INVITES] Invite source for ${member.user.tag} could not be identified.`);
+    }
+    database.saveInviteSnapshots(guild.id, [...current.values()].map((invite) => ({
+      code: invite.code, inviterId: invite.inviter && invite.inviter.id,
+      uses: invite.uses, maxUses: invite.maxUses, expiresTimestamp: invite.expiresTimestamp
+    })));
+  } catch (error) {
+    console.warn(`[INVITES] Could not track new member in ${guild.name}: ${error.message}`);
+  }
+}
+
 client.once('clientReady',async () => {
   console.log('[DISCORD] Logged in as '+client.user.tag);
   console.log('[DISCORD] Connected to '+client.guilds.cache.size+' server(s)');
+  for (const guild of client.guilds.cache.values()) await refreshInviteSnapshots(guild);
   await registerSlashCommands().catch((error) => console.error('[SLASH] Registration failed:',error.message));
   for (const session of database.allVoice()) database.stopVoice(session.guild_id,session.user_id);
   for (const guild of client.guilds.cache.values()) for (const state of guild.voiceStates.cache.values()) {
@@ -237,6 +313,20 @@ client.once('clientReady',async () => {
   processRoomExpirations(client).catch((error) => console.error('[ROOM] Initial sweep failed:',error));
   database.pruneXpEvents();
   setInterval(() => database.pruneXpEvents(),3600000).unref();
+});
+
+client.on('inviteCreate', (invite) => {
+  if (!invite.guild) return;
+  database.saveInviteSnapshots(invite.guild.id, [{
+    code: invite.code, inviterId: invite.inviter && invite.inviter.id,
+    uses: invite.uses, maxUses: invite.maxUses, expiresTimestamp: invite.expiresTimestamp
+  }]);
+});
+client.on('inviteDelete', (invite) => {
+  if (invite.guild) database.deleteInviteSnapshot(invite.guild.id, invite.code);
+});
+client.on('guildMemberAdd', (member) => {
+  trackInviteJoin(member).catch((error) => console.error('[INVITES] Join tracking failed:', error));
 });
 
 client.on('messageCreate',async (message) => {
@@ -253,7 +343,10 @@ client.on('messageCreate',async (message) => {
     const awardXp = database.featureEnabled(guildId,'levels');
     const awardCoins = database.featureEnabled(guildId,'economy');
     const result = database.addXp(guildId,message.author.id,'text',rate,{message:true,awardXp,awardCoins,xpPerCoin:Number(database.getConfig(guildId,'xp_per_coin','250'))});
-    if (awardXp && result.newTextLevel > result.oldTextLevel) await assignLevelRole(message.member,'text',result.newTextLevel);
+    if (awardXp && result.newTextLevel > result.oldTextLevel) {
+      await assignLevelRole(message.member,'text',result.newTextLevel);
+      await sendLevelUpNotice(message.channel, message.author, result.newTextLevel);
+    }
   } catch (error) { console.error('[XP] Message XP failed:',error); }
 });
 

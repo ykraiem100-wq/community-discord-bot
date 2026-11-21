@@ -28,7 +28,19 @@ function isAdmin(member, userId, permissionBits) {
 function adminEmbed(title, description) {
   return new EmbedBuilder().setColor(CYAN).setTitle(title).setDescription(description).setFooter({ text: 'DOS CONTROL PANEL • الإدارة فقط' });
 }
-async function homePayload(guildId) {
+function formatUptime(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  if (days) return `${days} أيام ${hours} ساعة`;
+  if (hours) return `${hours} ساعة ${minutes} دقيقة`;
+  return `${minutes} دقيقة`;
+}
+
+async function homePayload(guildOrId) {
+  const guild = typeof guildOrId === 'string' ? null : guildOrId;
+  const guildId = typeof guildOrId === 'string' ? guildOrId : guildOrId.id;
   const menu = new StringSelectMenuBuilder().setCustomId('admin:nav').setPlaceholder('اختر القسم الذي تريد إدارته')
     .addOptions(
       { label: 'إدارة المتجر', value: 'shop', description: 'إضافة المنتجات وتعديلها والطلبات', emoji: '🛍️' },
@@ -41,11 +53,24 @@ async function homePayload(guildId) {
       { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' }
     );
   const stats = database.stats(guildId) || {};
-  const featureKeys = ['economy', 'levels', 'shop', 'top', 'main_panel', 'interaction_roles', 'events'];
-  const features = Object.fromEntries(featureKeys.map((key) => [key, database.featureEnabled(guildId, key)]));
-  const image = await renderAdminDashboard({ stats, features });
+  stats.serverName = guild ? guild.name : 'DOS COMMUNITY';
+  stats.serverMembers = guild ? guild.memberCount : stats.members;
+  stats.uptimeSeconds = process.uptime();
+  stats.pendingOrders = database.pendingProductPurchases(guildId).length;
+  stats.productCount = database.products(guildId, true).length;
+  const image = await renderAdminDashboard({ stats });
+  const statsEmbed = adminEmbed('الإحصائيات الحالية • DOS COMMUNITY', 'هذه الأرقام حية من قاعدة بيانات البوت والسيرفر، بينما الصورة أعلاه تبقى مطابقة للتصميم الأصلي.');
+  statsEmbed.addFields(
+    { name: 'الأعضاء', value: Number(stats.serverMembers || 0).toLocaleString('en-US'), inline: true },
+    { name: 'إجمالي DOS Coin', value: Number(stats.coins || 0).toLocaleString('en-US'), inline: true },
+    { name: 'إجمالي XP', value: Number(stats.total_xp || 0).toLocaleString('en-US'), inline: true },
+    { name: 'منتجات المتجر المفعّلة', value: String(stats.productCount || 0), inline: true },
+    { name: 'طلبات المتجر المعلّقة', value: String(stats.pendingOrders || 0), inline: true },
+    { name: 'مدة تشغيل البوت', value: formatUptime(stats.uptimeSeconds), inline: true }
+  );
   return {
     files: [new AttachmentBuilder(image, { name: 'dos-admin-dashboard.png' })],
+    embeds: [statsEmbed],
     components: [new ActionRowBuilder().addComponents(menu)]
   };
 }
@@ -67,7 +92,14 @@ async function shopAdminPayload(guildId) {
     rows.push(new ActionRowBuilder().addComponents(menu));
   }
   rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return { files: [new AttachmentBuilder(image, { name: 'dos-shop-admin.png' })], components: rows };
+  const summary = products.slice(0, 10).map((product) => {
+    const price = product.currency === 'cash'
+      ? `${Number(product.price || 0).toFixed(2)} ${product.cash_currency || 'JOD'}`
+      : `${Number(product.price || 0).toLocaleString('en-US')} DOS Coin`;
+    return `**#${product.id} ${product.name}** — ${price} — ${product.active ? '🟢 مفعّل' : '🔴 متوقف'}`;
+  });
+  const productsEmbed = adminEmbed('قائمة المنتجات الفعلية', 'البيانات أدناه من قاعدة بيانات المتجر، أما الصورة أعلاه فهي شاشة التصميم الأصلية.\n\n' + (summary.join('\n') || 'لا توجد منتجات مضافة حالياً.'));
+  return { files: [new AttachmentBuilder(image, { name: 'dos-shop-admin.png' })], embeds: [productsEmbed], components: rows };
 }
 function shopSettingsPayload(guildId) {
   const settings = database.settings(guildId);
@@ -209,7 +241,7 @@ async function handleAdminInteraction(interaction, client) {
   if (parts[0] !== 'admin') return false;
   if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions)) return interaction.reply({ content: 'هذه اللوحة للإدارة فقط.', flags: MessageFlags.Ephemeral });
 
-  if (parts[1] === 'home') return interaction.update(await homePayload(interaction.guildId));
+  if (parts[1] === 'home') return interaction.update(await homePayload(interaction.guild));
   if (parts[1] === 'nav' && interaction.isStringSelectMenu()) {
     const section = interaction.values[0];
     const payload = section === 'shop' ? await shopAdminPayload(interaction.guildId)

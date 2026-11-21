@@ -7,7 +7,7 @@ const database = require('./database');
 const { CYAN } = require('./panels');
 const { renderShopGrid } = require('./render');
 
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 6;
 const COLOR_PAGE_SIZE = 25;
 const COLOR_STEPS = [0, 51, 102, 153, 204, 255];
 const COLOR_PALETTE = [];
@@ -31,12 +31,7 @@ async function shopPayload(guildId, page) {
   const safePage = Math.min(Math.max(0, Number(page) || 0), maxPage);
   const current = products.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
   const visualItems = current.map((product) => ({ ...product, display_price: currencyLabel(product) }));
-  const productTypes = [...new Set(current.map((product) => product.product_type))];
-  const imageTitle = productTypes.length === 1 && productTypes[0] === 'color'
-    ? 'Colors Role'
-    : productTypes.length === 1 && ['role_icon', 'icon'].includes(productTypes[0])
-      ? 'Role Icons' : 'DOS SHOP';
-  const image = await renderShopGrid(visualItems, imageTitle);
+  const image = await renderShopGrid(visualItems);
   const rows = [];
   if (current.length) {
     const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('اختر المنتج الذي تريد شراءه').setMinValues(1).setMaxValues(1)

@@ -28,13 +28,15 @@ function createWalletEmbed(member, user, guildId) {
 }
 async function createWalletImage(member, user, guildId, guild, positions = {}) {
   const curve = guildId ? database.curveForGuild(guildId) : undefined;
-  const text = levelProgress(Number(member.text_xp || 0), curve);
-  const voice = levelProgress(Number(member.voice_xp || 0), curve);
+  const overall = levelProgress(Number(member.total_xp || 0), curve);
   const image = await renderWallet({
-    user, profile: member, textProgress: text, voiceProgress: voice,
-    textPosition: positions.text || 0, voicePosition: positions.voice || 0,
-    displayName: positions.displayName || user.globalName || user.username, guild
+    user,
+    profile: { ...member, invites: Number(positions.invites || 0) },
+    textProgress: overall,
+    level: overall.level,
+    displayName: positions.displayName || user.globalName || user.username
   });
   return new AttachmentBuilder(image, { name: 'dos-wallet.png' });
 }
+
 module.exports = { createWalletEmbed, createWalletImage };
