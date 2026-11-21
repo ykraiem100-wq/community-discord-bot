@@ -73,13 +73,12 @@ function helpEmbed() {
 async function walletPayload(guild, user) {
   const guildId = guild.id;
   const profile = database.ensureMember(guildId, user.id);
-  const textRows = database.leaderboard(guildId, 'text', 'all');
-  const voiceRows = database.leaderboard(guildId, 'voice', 'all');
-  const textIndex = textRows.findIndex((row) => row.user_id === user.id);
-  const voiceIndex = voiceRows.findIndex((row) => row.user_id === user.id);
+  const guildMember = guild.members.cache.get(user.id)
+    || await guild.members.fetch(user.id).catch(() => null);
   const image = await createWalletImage(profile, user, guildId, guild, {
-    text: textIndex >= 0 ? textIndex + 1 : 0,
-    voice: voiceIndex >= 0 ? voiceIndex + 1 : 0
+    text: database.memberRank(guildId, user.id, 'text'),
+    voice: database.memberRank(guildId, user.id, 'voice'),
+    displayName: guildMember ? guildMember.displayName : (user.globalName || user.username)
   });
   return { files: [image] };
 }
@@ -196,7 +195,7 @@ async function handleSlashCommand(interaction) {
   const guildId = interaction.guildId;
   if (interaction.commandName === 'admin-panel') {
     if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
-    return interaction.reply({ ...homePayload(),flags:MessageFlags.Ephemeral });
+    return interaction.reply({ ...await homePayload(interaction.guildId),flags:MessageFlags.Ephemeral });
   }
   if (interaction.commandName === 'wallet') {
     if (!database.featureEnabled(guildId,'economy')) return interaction.reply({content:'المحفظة متوقفة مؤقتاً.',flags:MessageFlags.Ephemeral});

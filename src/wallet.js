@@ -32,7 +32,8 @@ async function createWalletImage(member, user, guildId, guild, positions = {}) {
   const voice = levelProgress(Number(member.voice_xp || 0), curve);
   const image = await renderWallet({
     user, profile: member, textProgress: text, voiceProgress: voice,
-    textPosition: positions.text || 0, voicePosition: positions.voice || 0, guild
+    textPosition: positions.text || 0, voicePosition: positions.voice || 0,
+    displayName: positions.displayName || user.globalName || user.username, guild
   });
   return new AttachmentBuilder(image, { name: 'dos-wallet.png' });
 }

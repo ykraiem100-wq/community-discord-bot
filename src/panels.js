@@ -4,7 +4,7 @@ const {
   StringSelectMenuBuilder, MessageFlags
 } = require('discord.js');
 const database = require('./database');
-const { renderPanelPage } = require('./render');
+const { renderPanelPage, renderMainPanel, renderLevelSystemPage } = require('./render');
 
 const CYAN = 0x36D9FF;
 const DEFAULT_CONTENT = {
@@ -44,21 +44,19 @@ function makeContentEmbed(guildId, key) {
 }
 async function buildMainPanel(guild, guildId) {
   const main = content(guildId, 'main');
-  const image = await renderPanelPage({
-    guild, title: main.title, body: main.body,
-    sections: ['قوانين السيرفر', 'معلومات السيرفر', 'رتب التفاعل', 'نظام السيرفر', 'الفعاليات'],
-    subtitle: 'DOS COMMUNITY • MAIN PANEL'
-  });
+  const image = await renderMainPanel({ title: main.title, body: main.body });
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('public:rules').setLabel('قوانين السيرفر').setEmoji('📜').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:info').setLabel('معلومات السيرفر').setEmoji('ℹ️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:notifications').setLabel('رتب التفاعل').setEmoji('🔔').setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId('public:info').setLabel('معلومات السيرفر').setEmoji('ℹ️').setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('public:system').setLabel('نظام السيرفر').setEmoji('⚙️').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('public:notifications').setLabel('رتب التفاعل').setEmoji('🔔').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('public:system').setLabel('نظام السيرفر').setEmoji('⚙️').setStyle(ButtonStyle.Secondary)
+  );
+  const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('public:events').setLabel('الفعاليات').setEmoji('🎮').setStyle(ButtonStyle.Secondary)
   );
-  return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
+  return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2, row3] };
 }
 async function publishMainPanel(guild, channel) {
   if (!channel || !channel.isTextBased() || !channel.send) throw new Error('اختر قناة كتابية صالحة.');
@@ -92,7 +90,13 @@ async function handlePublicPanelInteraction(interaction) {
       return interaction.reply({ content: 'قسم الفعاليات متوقف حالياً.', flags: MessageFlags.Ephemeral });
     }
     const item = content(interaction.guildId, action);
-    const image = await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • ' + action.toUpperCase() });
+    const image = action === 'system'
+      ? await renderLevelSystemPage({
+          messageXp: database.getConfig(interaction.guildId, 'message_xp', '7'),
+          voiceXp: database.getConfig(interaction.guildId, 'voice_xp', '9'),
+          xpPerCoin: database.getConfig(interaction.guildId, 'xp_per_coin', '250')
+        })
+      : await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • ' + action.toUpperCase() });
     return interaction.reply({ files: [new AttachmentBuilder(image, { name: 'dos-' + action + '.png' })], flags: MessageFlags.Ephemeral });
   }
   if (scope === 'public' && action === 'notifications') {

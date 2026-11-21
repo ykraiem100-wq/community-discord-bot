@@ -295,6 +295,15 @@ function logAdmin(guildId, userId, action, details) {
 function pruneXpEvents() {
   return db.prepare('DELETE FROM xp_events WHERE created_at < unixepoch() - 45*86400').run().changes;
 }
+function memberRank(guildId, userId, kind) {
+  const column = ({ text: 'text_xp', voice: 'voice_xp', coins: 'coins', all: 'total_xp' })[kind];
+  if (!column) throw new TypeError('Invalid leaderboard metric');
+  const row = db.prepare('SELECT ' + column + ' AS score FROM members WHERE guild_id=? AND user_id=?').get(guildId, userId);
+  if (!row) return null;
+  const higher = db.prepare('SELECT COUNT(*) AS count FROM members WHERE guild_id=? AND ' + column + '>?').get(guildId, Number(row.score) || 0);
+  return Number(higher.count) + 1;
+}
+
 function leaderboard(guildId, kind, period) {
   if (!period || period === 'all') {
     return (kind === 'voice' ? q.voiceTop : kind === 'coins' ? q.coinTop : kind === 'all' ? q.totalTop : q.textTop).all(guildId);
@@ -308,7 +317,7 @@ module.exports = {
   db, databasePath, ensureMember,
   levelFor: levelForGuild, curveForGuild,
   addXp,
-  leaderboard,
+  leaderboard, memberRank,
   stats: (guildId) => q.stats.get(guildId),
   startVoice: (guildId, userId, time) => q.voiceStart.run(guildId, userId, time || Date.now()),
   updateVoice: (guildId, userId, time) => q.voiceUpdate.run(time, guildId, userId),
