@@ -2,7 +2,7 @@ name: DOS Community Bot CI
 
 on:
   push:
-    branches: [feature/direct-png-images]
+    branches: [feature/direct-png-images, feature/dos-cyan-metal-designs]
   pull_request:
     branches: [main]
 
