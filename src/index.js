@@ -1,5 +1,22 @@
 require("dotenv").config();
 
+const token = process.env.DISCORD_TOKEN?.trim();
+if (!token) {
+  console.error("[Startup] Missing DISCORD_TOKEN. Add it in Nowhost > Environment and redeploy.");
+  process.exit(1);
+}
+
+const appId = process.env.DISCORD_CLIENT_ID?.trim();
+if (!appId) {
+  console.warn("[Config] DISCORD_CLIENT_ID is not set. Prefix commands can still run; Nowhost uses this value for its invite link.");
+}
+
+const nodeMajor = Number(process.versions.node.split(".")[0]);
+console.log("[Startup] DOS Community starting | Node", process.version);
+if (nodeMajor !== 20) {
+  console.warn("[Runtime] This project is configured for Node.js 20.x. Current runtime:", process.version);
+}
+
 const {
   Client,
   GatewayIntentBits,
@@ -14,15 +31,7 @@ const {
 
 const db = require("./db");
 const { makeWallet } = require("./wallet");
-
-const token = process.env.DISCORD_TOKEN;
-if (!token || !token.trim()) {
-  console.error("[Startup] Missing DISCORD_TOKEN environment variable.");
-  process.exit(1);
-}
-
 const prefix = process.env.BOT_PREFIX || ".";
-console.log("[Startup] Starting DOS Community bot on", process.version);
 
 const client = new Client({
   intents: [
@@ -305,5 +314,12 @@ client.on("messageCreate", async (message) => {
 
 client.login(token).catch((error) => {
   console.error("[Startup] Discord login failed:", error);
+
+  if (error?.code === 4014 || error?.name === "PrivilegedIntentsRequired") {
+    console.error("[Startup] Enable Server Members Intent and Message Content Intent in Discord Developer Portal > Bot > Privileged Gateway Intents, then redeploy.");
+  } else if (error?.name === "TokenInvalid" || error?.code === "TokenInvalid") {
+    console.error("[Startup] DISCORD_TOKEN is invalid or revoked. Regenerate it in Discord Developer Portal and replace the Nowhost secret.");
+  }
+
   process.exit(1);
 });
