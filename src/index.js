@@ -93,7 +93,6 @@ async function topPayload(guild, kind, period) {
   const image = await renderTopLeaderboard({ guild, entries, period, metric: kind });
   return { files: [new AttachmentBuilder(image, { name: 'dos-top.png' })] };
 }
-async function assignLevelRole
 async function assignLevelRole(member, kind, level) {
   if (!member || !level) return;
   const configured = database.roles(member.guild.id,kind).filter((row) => level >= row.level);

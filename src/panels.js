@@ -60,7 +60,6 @@ async function buildMainPanel(guild, guildId) {
   );
   return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
 }
-async function publishMainPanel
 async function publishMainPanel(guild, channel) {
   if (!channel || !channel.isTextBased() || !channel.send) throw new Error('اختر قناة كتابية صالحة.');
   const settings = database.settings(guild.id);
