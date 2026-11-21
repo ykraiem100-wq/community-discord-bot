@@ -184,9 +184,9 @@ function createPurchase(guildId, userId, key, name, price) {
 }
 function curveForGuild(guildId) {
   return normalizeCurve({
-    easyBase: getConfig(guildId,'level_easy_base','100'), easyStep: getConfig(guildId,'level_easy_step','4'),
-    mediumBase: getConfig(guildId,'level_medium_base','300'), mediumStep: getConfig(guildId,'level_medium_step','10'),
-    hardBase: getConfig(guildId,'level_hard_base','800'), hardStep: getConfig(guildId,'level_hard_step','20')
+    easyBase: getConfig(guildId,'level_easy_base','120'), easyStep: getConfig(guildId,'level_easy_step','8'),
+    mediumBase: getConfig(guildId,'level_medium_base','650'), mediumStep: getConfig(guildId,'level_medium_step','24'),
+    hardBase: getConfig(guildId,'level_hard_base','2200'), hardStep: getConfig(guildId,'level_hard_step','120')
   });
 }
 function levelForGuild(totalXp, guildId) { return baseLevelFor(totalXp, guildId ? curveForGuild(guildId) : undefined); }
