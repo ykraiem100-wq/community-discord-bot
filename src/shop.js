@@ -219,8 +219,16 @@ async function handleShopInteraction(interaction, client) {
       if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('البوت يحتاج صلاحية Manage Roles لإنشاء رتبة اللون.');
       let roleId = database.getCustomColorRole(guildId, interaction.user.id);
       let role = roleId ? await guild.roles.fetch(roleId).catch(() => null) : null;
-      if (role) await role.edit({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
-      else {
+      if (role) {
+        await role.edit({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
+        const memberRole = guild.roles.cache.find((item) => item.name.toLowerCase() === 'member');
+        if (memberRole && role.position <= memberRole.position) {
+          const targetPosition = Math.min(memberRole.position + 1, botMember.roles.highest.position - 1);
+          if (targetPosition <= memberRole.position) throw new Error('ارفع رتبة البوت فوق رتبة Member حتى يستطيع وضع لونك فوقها.');
+          await role.setPosition(targetPosition);
+          role = await guild.roles.fetch(role.id);
+        }
+      } else {
         role = await guild.roles.create({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
         const memberRole = guild.roles.cache.find((item) => item.name.toLowerCase() === 'member');
         if (memberRole) {
