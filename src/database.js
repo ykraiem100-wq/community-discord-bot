@@ -289,6 +289,25 @@ function setInteractionRoles(guildId, roles) {
   tx();
 }
 function interactionRoles(guildId) { return db.prepare('SELECT * FROM interaction_roles WHERE guild_id=? AND enabled=1 ORDER BY role_name').all(guildId); }
+function addCoins(guildId, userId, amount) {
+  if (!Number.isSafeInteger(amount) || amount < 1) throw new TypeError('Invalid coin amount');
+  ensureMember(guildId,userId);
+  db.prepare('UPDATE members SET coins=coins+?,updated_at=unixepoch() WHERE guild_id=? AND user_id=?').run(amount,guildId,userId);
+  return q.get.get(guildId,userId);
+}
+function resetMember(guildId, userId) {
+  ensureMember(guildId,userId);
+  db.prepare('UPDATE members SET text_xp=0,voice_xp=0,total_xp=0,coin_remainder=0,coins=0,messages=0,voice_seconds=0,updated_at=unixepoch() WHERE guild_id=? AND user_id=?').run(guildId,userId);
+  db.prepare('DELETE FROM xp_events WHERE guild_id=? AND user_id=?').run(guildId,userId);
+  return q.get.get(guildId,userId);
+}
+function ensureColorProduct(guildId) {
+  const existing = db.prepare("SELECT id FROM shop_products WHERE guild_id=? AND product_type='color' LIMIT 1").get(guildId);
+  if (existing) return existing.id;
+  const result = db.prepare("INSERT INTO shop_products(guild_id,name,description,price,currency,product_type,active) VALUES(?,?,?,0,'coin','color',0)")
+    .run(guildId,'لون رتبة خاص','اختر من أكثر من 200 لون، وسيُنشئ البوت رتبتك تلقائياً فوق رتبة Member حسب ترتيب الرتب.',);
+  return Number(result.lastInsertRowid);
+}
 function logAdmin(guildId, userId, action, details) {
   db.prepare('INSERT INTO admin_audit(guild_id,user_id,action,details) VALUES(?,?,?,?)').run(guildId,userId,action,details || '');
 }
@@ -319,7 +338,7 @@ module.exports = {
   setSetting, roles: (guildId, kind) => q.roles.all(guildId, kind), setRole,
   createPurchase, orders: (guildId) => q.orders.all(guildId), reviewOrder: reviewTransaction,
   setConfig, getConfig, featureEnabled, setFeature, setContent, getContent, savePanel, saveShopMessage,
-  createProduct, updateProduct, setProductActive, removeProduct, products,
+  createProduct, updateProduct, setProductActive, removeProduct, products, addCoins, resetMember, ensureColorProduct,
   purchaseProduct, getProductPurchase, updateProductPurchase, pendingProductPurchases, refundProductPurchase,
   setCustomColorRole, getCustomColorRole, createRoomRecord, activeRooms, getRoom,
   markRoomWarned, closeRoom, extendRoom, renewRoom, setInteractionRoles, interactionRoles,
