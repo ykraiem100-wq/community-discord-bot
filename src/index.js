@@ -1,29 +1,309 @@
 require("dotenv").config();
-const {Client,GatewayIntentBits,Partials,EmbedBuilder,AttachmentBuilder,PermissionsBitField,ActionRowBuilder,ButtonBuilder,ButtonStyle}=require("discord.js");
-const db=require("./db");
-const {makeWallet}=require("./wallet");
-const token=process.env.DISCORD_TOKEN;
-if(!token){console.error("Missing DISCORD_TOKEN environment variable");process.exit(1);}
-const prefix=process.env.BOT_PREFIX||".";
-const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.MessageContent,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildMembers],partials:[Partials.Channel]});
-const shop=[["Prison",25,"25 credits and up"],["Animate",30,"30 credits and up"],["Typo Virus",30,"30 credits and up"],["Vault Guard",50,"50 credits / 3 days"],["Sticker Slot",50,"50 credits / 14 days"],["Honorary Booster",150,"150 credits / 7 days"],["Emoji Slot",150,"150 credits"],["Custom Role",200,"200 credits / 14 days"]];
-const admin=m=>m.permissions.has(PermissionsBitField.Flags.Administrator);
-async function awardVoice(g,u,now=Date.now()){const s=db.voice(g,u);if(!s)return;const mins=Math.floor((now-s.started_at)/60000);if(mins<1)return;db.addXp(g,u,"voice",mins*9,{seconds:mins*60});db.updateVoice(g,u,s.started_at+mins*60000);}
-async function applyLevelRoles(member,kind,lvl){const rows=db.roles(member.guild.id,kind).filter(x=>lvl>=x.level);if(!rows.length)return;const r=member.guild.roles.cache.get(rows[rows.length-1].role_id);if(r&&r.position<member.guild.members.me.roles.highest.position&&!member.roles.cache.has(r.id))await member.roles.add(r).catch(()=>{});}
-client.once("ready",()=>{console.log("Logged in as "+client.user.tag);for(const s of db.allVoice())awardVoice(s.guild_id,s.user_id).catch(console.error);setInterval(()=>{for(const s of db.allVoice())awardVoice(s.guild_id,s.user_id).catch(console.error);},15000);});
-client.on("messageCreate",async msg=>{if(!msg.guild||msg.author.bot||msg.content.trim().startsWith(prefix))return;const r=db.addXp(msg.guild.id,msg.author.id,"text",7,{message:true});if(r.newTextLevel>r.oldTextLevel)await applyLevelRoles(msg.member,"text",r.newTextLevel);});
-client.on("voiceStateUpdate",async(oldS,newS)=>{const g=newS.guild.id,u=newS.id,oldCh=oldS.channelId,newCh=newS.channelId;const eligible=s=>!!s.channelId&&!s.member.user.bot&&!s.selfDeaf&&!s.serverDeaf&&!s.selfMute&&!s.serverMute;if(oldCh&&oldCh!==newCh){await awardVoice(g,u);db.stopVoice(g,u);}if(newCh&&eligible(newS)&&(!oldCh||oldCh!==newCh||!db.voice(g,u)))db.startVoice(g,u);if(newCh&&!eligible(newS)&&db.voice(g,u)){await awardVoice(g,u);db.stopVoice(g,u);}});
-client.on("guildMemberAdd",async member=>{const s=db.settings(member.guild.id);if(!s.welcome_channel_id)return;const ch=member.guild.channels.cache.get(s.welcome_channel_id);if(!ch||!ch.isTextBased())return;const e=new EmbedBuilder().setColor(0xc5a66a).setTitle("Welcome to "+member.guild.name).setDescription("أهلاً "+member+"! نتمنى لك وقتاً ممتعاً في مجتمعنا.").setThumbnail(member.user.displayAvatarURL()).setTimestamp();const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("welcome_rules").setLabel("Server Rules").setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId("welcome_info").setLabel("Read Information").setStyle(ButtonStyle.Primary));ch.send({embeds:[e],components:[row]}).catch(()=>{});});
-client.on("interactionCreate",async i=>{if(!i.isButton())return;if(i.customId==="welcome_rules")return i.reply({content:"يرجى مراجعة قناة القوانين في السيرفر.",ephemeral:true});if(i.customId==="welcome_info")return i.reply({content:"أهلاً بك! استخدم .محفظتي لعرض محفظتك ومستوياتك.",ephemeral:true});});
-client.on("messageCreate",async msg=>{if(!msg.guild||msg.author.bot||!msg.content.startsWith(prefix))return;const args=msg.content.slice(prefix.length).trim().split(/\s+/),cmd=args.shift(),g=msg.guild.id,u=msg.author.id;try{
-if(cmd==="محفظتي"){const user=msg.mentions.users.first()||msg.author,m=db.ensure(g,user.id),png=await makeWallet(m,user);return msg.reply({files:[new AttachmentBuilder(png,{name:"wallet.png"})]});}
-if(cmd==="متصدرين"){const kind=args[0]==="صوتي"?"voice":args[0]==="عملات"?"coins":"text",rows=db.leaderboard(g,kind),title=kind==="voice"?"المتصدرون صوتياً":kind==="coins"?"أغنى الأعضاء":"المتصدرون كتابياً";const lines=rows.map((r,i)=>"**"+(i+1)+".** <@"+r.user_id+"> — "+r.score.toLocaleString());return msg.reply({embeds:[new EmbedBuilder().setColor(0xc5a66a).setTitle(title).setDescription(lines.join("\n")||"لا توجد بيانات بعد.")]});}
-if(cmd==="إحصائيات"){const s=db.stats(g);return msg.reply({embeds:[new EmbedBuilder().setColor(0xc5a66a).setTitle("إحصائيات المجتمع").addFields({name:"الأعضاء المسجلون",value:String(s.members),inline:true},{name:"الرسائل",value:s.messages.toLocaleString(),inline:true},{name:"ساعات الصوت",value:(s.voice_seconds/3600).toFixed(1),inline:true},{name:"العملات المتداولة",value:s.coins.toLocaleString(),inline:true})]});}
-if(cmd==="المتجر"){const lines=shop.map((x,i)=>"**"+(i+1)+". "+x[0]+"** — "+x[2]+" (السعر الأساسي: "+x[1]+" عملة)").join("\n");return msg.reply({embeds:[new EmbedBuilder().setColor(0xc5a66a).setTitle("CREDITS SHOP").setDescription(lines+"\n\nللشراء اكتب: "+prefix+"شراء رقم_المنتج") ]});}
-if(cmd==="شراء"){const item=shop[Number(args[0])-1];if(!item)return msg.reply("اختر رقم منتج صحيح من .المتجر");const s=db.settings(g);if(s.shop_channel_id&&msg.channel.id!==s.shop_channel_id)return msg.reply("المتجر متاح في القناة المخصصة فقط.");if(!db.spend(g,u,item[1]))return msg.reply("رصيدك غير كافٍ. استخدم .محفظتي لمعرفة رصيدك.");const id=db.createOrder(g,u,String(args[0]),item[0],item[1]);return msg.reply("تم حجز "+item[0]+" مقابل "+item[1]+" عملة. رقم الطلب: #"+id+". ينتظر موافقة الإدارة.");}
-if(cmd==="طلبات"){if(!admin(msg.member))return;const rows=db.orders(g);return msg.reply(rows.map(o=>"#"+o.id+" — "+o.item_name+" — <@"+o.user_id+"> — "+o.price+" عملة").join("\n")||"لا توجد طلبات معلقة.");}
-if(cmd==="قبول"||cmd==="رفض"){if(!admin(msg.member))return;const id=Number(args[0]),o=db.getOrder(g,id);if(!o||o.status!=="pending")return msg.reply("الطلب غير موجود أو تمت مراجعته.");const status=cmd==="قبول"?"approved":"rejected";if(db.review(g,id,status,u)&&status==="rejected")db.db.prepare("UPDATE members SET coins=coins+? WHERE guild_id=? AND user_id=?").run(o.price,g,o.user_id);return msg.reply("تم "+(status==="approved"?"قبول":"رفض")+" الطلب #"+id+(status==="rejected"?" وإعادة المبلغ.":"."));}
-if(cmd==="تعيين_قناة"){if(!admin(msg.member))return;const ch=msg.mentions.channels.first();if(!ch)return msg.reply("اذكر القناة.");const key=args[0]==="ترحيب"?"welcome_channel_id":args[0]==="متجر"?"shop_channel_id":null;if(!key)return msg.reply("استخدم متجر أو ترحيب.");db.setSetting(g,key,ch.id);return msg.reply("تم تعيين قناة "+args[0]+": "+ch);}
-if(cmd==="رتبة_مستوى"){if(!admin(msg.member))return;const kind=args[0]==="صوت"?"voice":args[0]==="كتابة"?"text":null,lvl=Number(args[1]),role=msg.mentions.roles.first();if(!kind||!Number.isInteger(lvl)||lvl<1||!role)return msg.reply("مثال: .رتبة_مستوى كتابة 10 @Role");db.setRole(g,kind,lvl,role.id);return msg.reply("تم ربط رتبة "+role+" بمستوى "+lvl+".");}
-}catch(e){console.error(e);return msg.reply("حدث خطأ أثناء تنفيذ الأمر.");}});
-client.login(token);
+
+const {
+  Client,
+  GatewayIntentBits,
+  Partials,
+  EmbedBuilder,
+  AttachmentBuilder,
+  PermissionsBitField,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
+
+const db = require("./db");
+const { makeWallet } = require("./wallet");
+
+const token = process.env.DISCORD_TOKEN;
+if (!token || !token.trim()) {
+  console.error("[Startup] Missing DISCORD_TOKEN environment variable.");
+  process.exit(1);
+}
+
+const prefix = process.env.BOT_PREFIX || ".";
+console.log("[Startup] Starting DOS Community bot on", process.version);
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMembers
+  ],
+  partials: [Partials.Channel]
+});
+
+const shop = [
+  ["Prison", 25, "25 credits and up"],
+  ["Animate", 30, "30 credits and up"],
+  ["Typo Virus", 30, "30 credits and up"],
+  ["Vault Guard", 50, "50 credits / 3 days"],
+  ["Sticker Slot", 50, "50 credits / 14 days"],
+  ["Honorary Booster", 150, "150 credits / 7 days"],
+  ["Emoji Slot", 150, "150 credits"],
+  ["Custom Role", 200, "200 credits / 14 days"]
+];
+
+const admin = (member) => member.permissions.has(PermissionsBitField.Flags.Administrator);
+
+async function awardVoice(guildId, userId, now = Date.now()) {
+  const session = db.voice(guildId, userId);
+  if (!session) return;
+
+  const minutes = Math.floor((now - session.started_at) / 60000);
+  if (minutes < 1) return;
+
+  db.addXp(guildId, userId, "voice", minutes * 9, { seconds: minutes * 60 });
+  db.updateVoice(guildId, userId, session.started_at + minutes * 60000);
+}
+
+async function applyLevelRoles(member, kind, level) {
+  const rows = db.roles(member.guild.id, kind).filter((row) => level >= row.level);
+  if (!rows.length) return;
+
+  const role = member.guild.roles.cache.get(rows[rows.length - 1].role_id);
+  const botHighestRole = member.guild.members.me?.roles.highest;
+
+  if (role && botHighestRole && role.position < botHighestRole.position && !member.roles.cache.has(role.id)) {
+    await member.roles.add(role).catch((error) => console.error("[Roles] Could not assign level role:", error.message));
+  }
+}
+
+client.once("ready", () => {
+  console.log("[Discord] Logged in as " + client.user.tag);
+
+  for (const session of db.allVoice()) {
+    awardVoice(session.guild_id, session.user_id).catch((error) => console.error("[Voice] Resume failed:", error));
+  }
+
+  setInterval(() => {
+    for (const session of db.allVoice()) {
+      awardVoice(session.guild_id, session.user_id).catch((error) => console.error("[Voice] XP update failed:", error));
+    }
+  }, 15000);
+});
+
+client.on("error", (error) => console.error("[Discord] Client error:", error));
+client.on("shardError", (error) => console.error("[Discord] Gateway shard error:", error));
+
+client.on("messageCreate", async (message) => {
+  if (!message.guild || message.author.bot || message.content.trim().startsWith(prefix)) return;
+
+  const result = db.addXp(message.guild.id, message.author.id, "text", 7, { message: true });
+  if (result.newTextLevel > result.oldTextLevel) {
+    await applyLevelRoles(message.member, "text", result.newTextLevel);
+  }
+});
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+  const guildId = newState.guild.id;
+  const userId = newState.id;
+  const oldChannelId = oldState.channelId;
+  const newChannelId = newState.channelId;
+
+  const eligible = (state) =>
+    !!state.channelId &&
+    !state.member.user.bot &&
+    !state.selfDeaf &&
+    !state.serverDeaf &&
+    !state.selfMute &&
+    !state.serverMute;
+
+  if (oldChannelId && oldChannelId !== newChannelId) {
+    await awardVoice(guildId, userId);
+    db.stopVoice(guildId, userId);
+  }
+
+  if (newChannelId && eligible(newState) && (!oldChannelId || oldChannelId !== newChannelId || !db.voice(guildId, userId))) {
+    db.startVoice(guildId, userId);
+  }
+
+  if (newChannelId && !eligible(newState) && db.voice(guildId, userId)) {
+    await awardVoice(guildId, userId);
+    db.stopVoice(guildId, userId);
+  }
+});
+
+client.on("guildMemberAdd", async (member) => {
+  const settings = db.settings(member.guild.id);
+  if (!settings.welcome_channel_id) return;
+
+  const channel = member.guild.channels.cache.get(settings.welcome_channel_id);
+  if (!channel || !channel.isTextBased()) return;
+
+  const embed = new EmbedBuilder()
+    .setColor(0xc5a66a)
+    .setTitle("Welcome to " + member.guild.name)
+    .setDescription("أهلاً " + member + "! نتمنى لك وقتاً ممتعاً في مجتمعنا.")
+    .setThumbnail(member.user.displayAvatarURL())
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("welcome_rules").setLabel("Server Rules").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("welcome_info").setLabel("Read Information").setStyle(ButtonStyle.Primary)
+  );
+
+  channel.send({ embeds: [embed], components: [row] }).catch((error) => console.error("[Welcome] Could not send welcome:", error.message));
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton()) return;
+
+  if (interaction.customId === "welcome_rules") {
+    return interaction.reply({ content: "يرجى مراجعة قناة القوانين في السيرفر.", ephemeral: true });
+  }
+
+  if (interaction.customId === "welcome_info") {
+    return interaction.reply({ content: "أهلاً بك! استخدم .محفظتي لعرض محفظتك ومستوياتك.", ephemeral: true });
+  }
+});
+
+client.on("messageCreate", async (message) => {
+  if (!message.guild || message.author.bot || !message.content.startsWith(prefix)) return;
+
+  const args = message.content.slice(prefix.length).trim().split(/\s+/);
+  const command = args.shift();
+  const guildId = message.guild.id;
+  const userId = message.author.id;
+
+  try {
+    if (command === "محفظتي") {
+      const user = message.mentions.users.first() || message.author;
+      const memberData = db.ensure(guildId, user.id);
+      const png = await makeWallet(memberData, user);
+      return message.reply({ files: [new AttachmentBuilder(png, { name: "wallet.png" })] });
+    }
+
+    if (command === "متصدرين") {
+      const kind = args[0] === "صوتي" ? "voice" : args[0] === "عملات" ? "coins" : "text";
+      const rows = db.leaderboard(guildId, kind);
+      const title = kind === "voice" ? "المتصدرون صوتياً" : kind === "coins" ? "أغنى الأعضاء" : "المتصدرون كتابياً";
+      const lines = rows.map((row, index) => "**" + (index + 1) + ".** <@" + row.user_id + "> — " + row.score.toLocaleString());
+      return message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xc5a66a)
+            .setTitle(title)
+            .setDescription(lines.join("\n") || "لا توجد بيانات بعد.")
+        ]
+      });
+    }
+
+    if (command === "إحصائيات") {
+      const stats = db.stats(guildId);
+      return message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xc5a66a)
+            .setTitle("إحصائيات المجتمع")
+            .addFields(
+              { name: "الأعضاء المسجلون", value: String(stats.members), inline: true },
+              { name: "الرسائل", value: stats.messages.toLocaleString(), inline: true },
+              { name: "ساعات الصوت", value: (stats.voice_seconds / 3600).toFixed(1), inline: true },
+              { name: "العملات المتداولة", value: stats.coins.toLocaleString(), inline: true }
+            )
+        ]
+      });
+    }
+
+    if (command === "المتجر") {
+      const lines = shop.map((item, index) =>
+        "**" + (index + 1) + ". " + item[0] + "** — " + item[2] + " (السعر الأساسي: " + item[1] + " عملة)"
+      ).join("\n");
+
+      return message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xc5a66a)
+            .setTitle("CREDITS SHOP")
+            .setDescription(lines + "\n\nللشراء اكتب: " + prefix + "شراء رقم_المنتج")
+        ]
+      });
+    }
+
+    if (command === "شراء") {
+      const item = shop[Number(args[0]) - 1];
+      if (!item) return message.reply("اختر رقم منتج صحيح من .المتجر");
+
+      const settings = db.settings(guildId);
+      if (settings.shop_channel_id && message.channel.id !== settings.shop_channel_id) {
+        return message.reply("المتجر متاح في القناة المخصصة فقط.");
+      }
+
+      if (!db.spend(guildId, userId, item[1])) {
+        return message.reply("رصيدك غير كافٍ. استخدم .محفظتي لمعرفة رصيدك.");
+      }
+
+      const orderId = db.createOrder(guildId, userId, String(args[0]), item[0], item[1]);
+      return message.reply("تم حجز " + item[0] + " مقابل " + item[1] + " عملة. رقم الطلب: #" + orderId + ". ينتظر موافقة الإدارة.");
+    }
+
+    if (command === "طلبات") {
+      if (!admin(message.member)) return;
+      const rows = db.orders(guildId);
+      return message.reply(
+        rows.map((order) => "#" + order.id + " — " + order.item_name + " — <@" + order.user_id + "> — " + order.price + " عملة").join("\n") ||
+        "لا توجد طلبات معلقة."
+      );
+    }
+
+    if (command === "قبول" || command === "رفض") {
+      if (!admin(message.member)) return;
+
+      const id = Number(args[0]);
+      const order = db.getOrder(guildId, id);
+      if (!order || order.status !== "pending") {
+        return message.reply("الطلب غير موجود أو تمت مراجعته.");
+      }
+
+      const status = command === "قبول" ? "approved" : "rejected";
+      if (db.review(guildId, id, status, userId) && status === "rejected") {
+        db.db.prepare("UPDATE members SET coins = coins + ? WHERE guild_id = ? AND user_id = ?")
+          .run(order.price, guildId, order.user_id);
+      }
+
+      return message.reply(
+        "تم " + (status === "approved" ? "قبول" : "رفض") + " الطلب #" + id +
+        (status === "rejected" ? " وإعادة المبلغ." : ".")
+      );
+    }
+
+    if (command === "تعيين_قناة") {
+      if (!admin(message.member)) return;
+
+      const channel = message.mentions.channels.first();
+      if (!channel) return message.reply("اذكر القناة.");
+
+      const key = args[0] === "ترحيب" ? "welcome_channel_id" : args[0] === "متجر" ? "shop_channel_id" : null;
+      if (!key) return message.reply("استخدم متجر أو ترحيب.");
+
+      db.setSetting(guildId, key, channel.id);
+      return message.reply("تم تعيين قناة " + args[0] + ": " + channel);
+    }
+
+    if (command === "رتبة_مستوى") {
+      if (!admin(message.member)) return;
+
+      const kind = args[0] === "صوت" ? "voice" : args[0] === "كتابة" ? "text" : null;
+      const level = Number(args[1]);
+      const role = message.mentions.roles.first();
+
+      if (!kind || !Number.isInteger(level) || level < 1 || !role) {
+        return message.reply("مثال: .رتبة_مستوى كتابة 10 @Role");
+      }
+
+      db.setRole(guildId, kind, level, role.id);
+      return message.reply("تم ربط رتبة " + role + " بمستوى " + level + ".");
+    }
+  } catch (error) {
+    console.error("[Command] Error while executing " + command + ":", error);
+    return message.reply("حدث خطأ أثناء تنفيذ الأمر.").catch(() => {});
+  }
+});
+
+client.login(token).catch((error) => {
+  console.error("[Startup] Discord login failed:", error);
+  process.exit(1);
+});
