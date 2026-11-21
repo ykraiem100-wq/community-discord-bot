@@ -1,0 +1,26 @@
+DOS COMMUNITY — رفع الحزمة النظيفة على Nowhost
+================================================
+
+1) فك ضغط ملف DOS-COMMUNITY-Nowhost-Cyan-Templates.zip.
+2) افتح مجلد DOS-COMMUNITY-Nowhost.
+3) ارفع محتويات هذا المجلد إلى جذر مشروعك في Nowhost؛ يجب أن يكون package.json بجانب مجلدي src و assets.
+4) اختر Node.js 20.x.
+5) أمر التثبيت: npm install
+6) أمر التشغيل: npm start
+7) احتفظ بمتغير DATA_DIR الحالي الذي يشير إلى التخزين الدائم، مثلاً /app/data.
+
+متغيرات البيئة المطلوبة موضحة في .env.example:
+DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID (اختياري),
+OWNER_ID (اختياري), BOT_PREFIX, DATA_DIR, TZ.
+
+مهم جداً:
+- لا ترفع ملف .env حقيقياً أو أي Discord token إلى GitHub أو داخل ZIP.
+- لا ترفع قاعدة بيانات فارغة فوق قاعدة بيانات الإنتاج.
+- لا تحذف /app/data أو community.sqlite؛ فهما يحتويان بيانات الأعضاء والاقتصاد.
+- لا تغيّر أسرار Nowhost الحالية.
+- الحزمة لا تتضمن DISCORD_TOKEN ولا قاعدة بيانات الإنتاج.
+- لا حاجة لتحديث discord.js؛ المشروع يبقى على discord.js 14.28.1 وNode.js 20.x.
+
+الفحوصات:
+- فحص صياغة JavaScript: npm run check
+- الاختبارات: npm test (بعد اكتمال npm install)

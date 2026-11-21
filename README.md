@@ -59,7 +59,7 @@ Private room products use DOS Coin, last 30 days, send a reminder three days bef
 
 Cash products are separate from DOS Coin. A cash order can show an external HTTPS payment link, but payment is **not automatically verified** by the bot. An Administrator must verify receipt in the external payment provider before approving delivery. Cash refunds, if needed, are handled manually outside Discord. Automatic payment capture requires a separately integrated payment provider/webhook and is not included in this version. To keep room renewals reliable, private-room products are restricted to DOS Coin at present.
 
-Discord message embeds display product cards vertically; the shop uses per-product embeds with images plus a select menu and pagination. The graphic mockups are visual references, not custom image rendering inside Discord.
+The DOS SHOP renders a metallic silver-and-cyan PNG with three products per row and up to nine products per page, then provides the real purchase select menu and page buttons below the image. Product names, prices and uploaded product images are read from the configured product records.
 
 ## Data and tests
 
@@ -71,7 +71,25 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 
 - `/wallet` و`.محفظتي` يرسلان بطاقة المحفظة كملف PNG مباشر، مع فصل تقدّم الكتابة عن الصوت.
 - `/top` و`TOP` يرسلان صورة المتصدرين كملف PNG مباشر.
-- `/shop` و`.المتجر` يرسلان صورة منتجات بثلاثة أعمدة (حتى 9 منتجات في الصفحة) مع قائمة شراء وأزرار صفحات Discord منفصلة أسفل الصورة.
+- `/shop` و`.المتجر` يرسلان صورة منتجات بثلاثة أعمدة (حتى 9 منتجات في الصفحة) مع قائمة شراء وأزرار صفحات Discord أسفل الصورة.
 - لوحة DOS الرئيسية وصفحات القوانين والمعلومات والنظام والفعاليات تُرسل كصور PNG مباشرة؛ وتبقى أزرار التفاعل الحقيقية كعناصر Discord أسفل صورة اللوحة.
-- تعتمد الرسومات على `@napi-rs/canvas` و`@fontsource/noto-sans-arabic`.
+- تستخدم خلفيات PNG الجديدة داخل `assets/templates/`، ويضيف البوت فوقها البيانات الحقيقية. صورك الأصلية والقصاصات المرجعية موجودة في `assets/design-references/`.
 - لا يجري تعديل مخطط بيانات الأعضاء أو حذف قاعدة البيانات بسبب إضافة الرسومات.
+
+## القوالب والصور الجديدة
+
+تم استبدال مكتبة القوالب القديمة بتسعة أصول تشغيلية نظيفة ومتوافقة مع Node.js 20 وNowhost. هذه الخلفيات لا تحتوي أرصدة أو أسماء تجريبية؛ يقوم `src/render.js` برسم الاسم والرصيد وXP والرتب والأسعار من بيانات البوت الفعلية.
+
+- `dos-community-banner.png`: شعار DOS COMMUNITY المقتطع من مرجعك ويظهر في أعلى الصور.
+- `wallet-base.png`: المحفظة.
+- `leaderboard-base.png`: المتصدرون.
+- `shop-base.png`: DOS SHOP بثلاثة أعمدة وحتى 9 منتجات في الصفحة.
+- `main-panel-base.png`: اللوحة الرئيسية بخمسة أقسام.
+- `content-panel-base.png`: رسائل القوانين والمعلومات ورتب التفاعل والفعاليات.
+- `level-system-base.png`: مراحل المستويات ومعدلات XP والتحويل الحالية.
+- `admin-dashboard-base.png`: الصفحة الرئيسية للوحة الإدارة.
+- `admin-shop-base.png`: صفحة إدارة منتجات المتجر.
+
+الصور التي أرسلتها محفوظة كما هي في `assets/design-references/`، مع قصاصات منفصلة داخل `assets/design-references/crops/` لتسهيل مراجعة كل شاشة. القصاصات مرجع بصري فقط ولا تُعرض ببيانات تجريبية في Discord.
+
+راجع `assets/templates/README.txt` و`assets/templates/images-map.json` لمعرفة ربط كل خلفية بوظيفة الرسم التي تستخدمها. لا تحذف الملفات التسعة أو تغيّر أسماءها. إضافة هذه الأصول لا تعدّل قاعدة البيانات ولا تمسح العملات أو XP.
