@@ -40,16 +40,11 @@ async function homePayload(guildId) {
       { label: 'رتب المستويات', value: 'level_roles', description: 'ربط رتب بمستويات الكتابة والصوت', emoji: '🏅' },
       { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' }
     );
-  const image = await renderAdminDashboard();
-  return {
-    files: [new AttachmentBuilder(image, { name: 'dos-admin-dashboard.png' })],
-    components: [new ActionRowBuilder().addComponents(menu)]
-  };
+  return { embeds: [adminEmbed('DOS CONTROL PANEL', 'لوحة إدارة تفاعلية داخل Discord. اختر القسم من القائمة أدناه. تظهر اللوحة للجميع، لكن تنفيذ التعديلات محصور بالإدارة.')], components: [new ActionRowBuilder().addComponents(menu)] };
 }
 async function shopAdminPayload(guildId) {
   const products = database.products(guildId, false);
-  const image = await renderAdminShop(products);
-  const rows = [new ActionRowBuilder().addComponents(
+    const rows = [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('admin:shop:add').setLabel('إضافة منتج').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('admin:shop:pending').setLabel('طلبات معلقة').setEmoji('🧾').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('admin:shop:settings').setLabel('إعداد القنوات').setEmoji('⚙️').setStyle(ButtonStyle.Secondary),
@@ -61,10 +56,7 @@ async function shopAdminPayload(guildId) {
     rows.push(new ActionRowBuilder().addComponents(menu));
   }
   rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return {
-    files: [new AttachmentBuilder(image, { name: 'dos-shop-admin.png' })],
-    components: rows
-  };
+  return { embeds: [adminEmbed('إدارة DOS SHOP', products.map((p) => `#${p.id} • ${p.name} • ${p.price} ${p.currency} • ${p.active ? 'متاح' : 'متوقف'}`).join('\\n') || 'لا توجد منتجات بعد. أضف أول منتج من الزر أدناه.')], components: rows };
 }
 function shopSettingsPayload(guildId) {
   const settings = database.settings(guildId);
