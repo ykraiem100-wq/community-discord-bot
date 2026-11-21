@@ -1,12 +1,13 @@
 {
   "name": "community-discord-bot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "commonjs",
   "description": "Arabic Discord community bot with leveling, wallet, shop and stats",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/db.js && node --check src/wallet.js"
   },
   "engines": {
     "node": "20.x"
