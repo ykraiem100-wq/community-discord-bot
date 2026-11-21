@@ -10,8 +10,13 @@ try {
   const guild = 'features-guild';
   const user = 'features-user';
   db.ensureMember(guild,user);
+  const colorProductId = db.ensureColorProduct(guild);
+  assert.equal(db.products(guild,false).find((p) => p.id === colorProductId).active,0);
+  assert.equal(db.ensureColorProduct(guild),colorProductId);
+  db.addCoins(guild,user,12);
+  assert.equal(db.ensureMember(guild,user).coins,12);
   db.addXp(guild,user,'text',250,{message:true});
-  assert.equal(db.ensureMember(guild,user).coins,1);
+  assert.equal(db.ensureMember(guild,user).coins,13);
 
   db.setFeature(guild,'shop',false,'admin');
   assert.equal(db.featureEnabled(guild,'shop'),false);
@@ -53,6 +58,9 @@ try {
   db.setConfig(guild,'message_xp',11,'admin');
   assert.equal(db.getConfig(guild,'message_xp','7'),'11');
   assert.ok(db.leaderboard(guild,'text','daily').length > 0);
+  db.resetMember(guild,user);
+  assert.equal(db.ensureMember(guild,user).coins,0);
+  assert.equal(db.ensureMember(guild,user).total_xp,0);
   db.close();
   console.log('Feature database tests passed.');
 } finally {
