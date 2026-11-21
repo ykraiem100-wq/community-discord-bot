@@ -65,7 +65,8 @@ function helpEmbed() {
     '/color-selection — استكمال اختيار اللون برقم الطلب إن تعذّر فتح الرسائل الخاصة',
     '.متصدرين كتابي / صوتي / عملات — ترتيب مختصر',
     '.إحصائيات — إحصائيات السيرفر',
-    'للإدارة: /admin-panel — لوحة التحكم التفاعلية',
+    'للجميع: /admin-panel — عرض لوحة التحكم (التعديل للإدارة فقط)',
+    'للإدارة: .اضافة_عملات @عضو 100 أو .اضافة_xp @عضو 500 أو .reset @عضو',
     'للإدارة: .تعيين_قناة متجر #قناة',
     'للإدارة: .رتبة_مستوى كتابة 10 @رتبة أو .رتبة_مستوى صوت 10 @رتبة'
   ].join('\n')).setFooter({ text: '7 XP لكل رسالة • 9 XP لكل دقيقة صوت • 250 XP = 1 DOS Coin (قابلة للتعديل من الإدارة)' });
@@ -128,6 +129,23 @@ async function handleCommand(message) {
   const userId = message.author.id;
   try {
     if (['مساعدة','اوامر','أوامر'].includes(command)) return message.reply({ embeds:[helpEmbed()] });
+    if (command === 'لوحة' || command === 'لوحة_التحكم') return message.reply(await homePayload(guildId));
+    if (command === 'اضافة_عملات' || command === 'اضافة_xp') {
+      if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
+      const target = message.mentions.members.first();
+      const amount = Number(args[1]);
+      if (!target || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000000) return message.reply('الاستخدام: .اضافة_عملات @عضو 100 أو .اضافة_xp @عضو 500');
+      if (command === 'اضافة_عملات') database.addCoins(guildId,target.id,amount);
+      else database.addXp(guildId,target.id,'text',amount,{awardXp:true,awardCoins:false});
+      database.logAdmin(guildId,userId,command,`target=${target.id};amount=${amount}`);
+      return message.reply(command === 'اضافة_عملات' ? `تمت إضافة ${amount} DOS Coin إلى ${target}.` : `تمت إضافة ${amount} XP إلى ${target}.`);
+    }
+    if (command === 'reset') {
+      if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
+      const target = message.mentions.members.first();
+      if (!target) return message.reply('الاستخدام: .reset @عضو');
+      return message.reply({ content: `⚠️ تأكيد تصفير بيانات ${target}؟ سيتم تصفير العملات وXP واللفلات والرسائل ووقت الصوت. لا يمكن التراجع.`, components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin:reset-confirm:${target.id}`).setLabel('تأكيد التصفير').setStyle(ButtonStyle.Danger),new ButtonBuilder().setCustomId('admin:reset-cancel').setLabel('إلغاء').setStyle(ButtonStyle.Secondary))] });
+    }
     if (command === 'محفظتي') {
       if (!database.featureEnabled(guildId,'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
       const user = message.mentions.users.first() || message.author;
@@ -280,7 +298,7 @@ client.on('interactionCreate',async (interaction) => {
       if (handled !== false) return handled;
     }
     if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
-      if (interaction.customId.startsWith('admin:')) return await handleAdminInteraction(interaction,client);
+      if (interaction.customId.startsWith('admin:reset-cancel')) return interaction.update({content:'تم إلغاء التصفير.',components:[]});\n      if (interaction.customId.startsWith('admin:reset-confirm:')) {\n        if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({content:'هذا الإجراء للإدارة فقط.',flags:MessageFlags.Ephemeral});\n        const targetId = interaction.customId.split(':')[2];\n        database.resetMember(interaction.guildId,targetId);\n        database.logAdmin(interaction.guildId,interaction.user.id,'member_reset',`target=${targetId}`);\n        return interaction.update({content:`تم تصفير العملات وXP واللفل والرسائل ووقت الصوت للعضو <@${targetId}>.`,components:[]});\n      }\n      if (interaction.customId.startsWith('admin:')) return await handleAdminInteraction(interaction,client);
       if (interaction.customId.startsWith('public:') || interaction.customId.startsWith('notify:')) {
         const handled = await handlePublicPanelInteraction(interaction);
         if (handled !== false) return handled;
