@@ -249,6 +249,7 @@ async function handleSlashCommand(interaction) {
 
 client.once('clientReady',async () => {
   console.log('[DISCORD] Logged in as '+client.user.tag);
+  for (const guild of client.guilds.cache.values()) database.ensureColorProduct(guild.id);
   console.log('[DISCORD] Connected to '+client.guilds.cache.size+' server(s)');
   await registerSlashCommands().catch((error) => console.error('[SLASH] Registration failed:',error.message));
   for (const session of database.allVoice()) database.stopVoice(session.guild_id,session.user_id);
