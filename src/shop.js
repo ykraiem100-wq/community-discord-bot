@@ -22,18 +22,14 @@ function productIcon(type) {
   return ({ color: '🎨', text_room: '📝', voice_room: '🔊', role: '👑', digital: '📦', manual: '🛠️' })[type] || '🛍️';
 }
 async function shopPayload(guildId, page) {
-  if (!database.featureEnabled(guildId, 'shop')) {
-    return { content: '🛍️ DOS SHOP مغلق مؤقتاً. تابع إعلانات DOS COMMUNITY لمعرفة موعد عودته.', components: [] };
-  }
+  if (!database.featureEnabled(guildId, 'shop')) return { content: '🛍️ DOS SHOP مغلق مؤقتاً.', components: [] };
   const products = database.products(guildId, true);
   const maxPage = Math.max(0, Math.ceil(products.length / PAGE_SIZE) - 1);
   const safePage = Math.min(Math.max(0, Number(page) || 0), maxPage);
   const current = products.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-  const visualItems = current.map((product) => ({ ...product, display_price: currencyLabel(product) }));
-  const image = await renderShopGrid(visualItems, 'DOS SHOP');
   const rows = [];
   if (current.length) {
-    const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('اختر المنتج الذي تريد شراءه').setMinValues(1).setMaxValues(1)
+    const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('Buy… اختر المشتريات').setMinValues(1).setMaxValues(1)
       .addOptions(current.map((p) => ({ label: p.name.slice(0, 100), value: String(p.id), description: currencyLabel(p).slice(0, 100), emoji: productIcon(p.product_type) })));
     rows.push(new ActionRowBuilder().addComponents(menu));
   }
@@ -44,12 +40,8 @@ async function shopPayload(guildId, page) {
     if (safePage < maxPage) row.addComponents(new ButtonBuilder().setCustomId('shop:page:' + (safePage + 1)).setLabel('التالي').setStyle(ButtonStyle.Secondary));
     rows.push(row);
   }
-  return {
-    content: '**DOS SHOP** • صفحة ' + (safePage + 1) + '/' + (maxPage + 1) + '\nاختر المنتج من القائمة أسفل الصورة.',
-    files: [new AttachmentBuilder(image, { name: 'dos-shop.png' })],
-    attachments: [],
-    components: rows
-  };
+  const description = current.length ? current.map((p) => `${productIcon(p.product_type)} **${p.name}** — ${currencyLabel(p)}\\n${p.description || 'بدون وصف'}`).join('\\n\\n') : 'لا توجد مشتريات متاحة حالياً. ستظهر المنتجات هنا عندما تضيفها الإدارة.';
+  return { embeds: [new EmbedBuilder().setColor(CYAN).setTitle('CREDITS SHOP').setDescription(description).setFooter({ text: `DOS COMMUNITY • صفحة ${safePage + 1}/${maxPage + 1}` })], components: rows };
 }
 function colorPickerPayload(guildId, purchaseId, page) {
   const totalPages = Math.ceil(COLOR_PALETTE.length / PAGE_SIZE);
