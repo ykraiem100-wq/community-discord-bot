@@ -1,0 +1,13 @@
+{
+  "runtime": {
+    "dos-community-banner.png": "src/render.js:header (shared brand mark)",
+    "wallet-base.png": "src/render.js:renderWallet",
+    "leaderboard-base.png": "src/render.js:renderTopLeaderboard",
+    "shop-base.png": "src/render.js:renderShopGrid",
+    "main-panel-base.png": "src/render.js:renderMainPanel",
+    "content-panel-base.png": "src/render.js:renderPanelPage",
+    "level-system-base.png": "src/render.js:renderLevelSystemPage",
+    "admin-dashboard-base.png": "src/render.js:renderAdminDashboard",
+    "admin-shop-base.png": "src/render.js:renderAdminShop"
+  }
+}
