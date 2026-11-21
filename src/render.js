@@ -177,6 +177,9 @@ function wrapText(ctx, value, x, y, maxWidth, lineHeight, size = 22, color = C.s
 }
 
 async function renderWallet({ user, profile, textProgress, voiceProgress, textPosition = 0, voicePosition = 0, guild = null }) {
+  profile = profile || {};
+  textProgress = textProgress || {};
+  voiceProgress = voiceProgress || {};
   const w = 1500, h = 690, canvas = createCanvas(w, h), ctx = canvas.getContext('2d');
   backdrop(ctx, w, h);
   header(ctx, w, 'محفظتي', 'بطاقة العضو • DOS WALLET');
@@ -227,8 +230,8 @@ async function renderTopLeaderboard({ guild, entries = [], period = 'all', metri
   const list = entries.slice(0, 10);
   if (!list.length) text(ctx, 'لا توجد بيانات لهذه الفترة حتى الآن', 750, 500, 28, C.muted, 700, 'center', 1000);
   const topCards = [
-    { index: 1, x: 550, width: 400, accent: C.gold },
-    { index: 0, x: 100, width: 400, accent: C.silver },
+    { index: 1, x: 100, width: 400, accent: C.silver },
+    { index: 0, x: 550, width: 400, accent: C.gold },
     { index: 2, x: 1000, width: 400, accent: '#C58F62' }
   ];
   for (const slot of topCards) {
@@ -282,7 +285,7 @@ async function renderShopGrid(items = [], title = 'DOS SHOP') {
 
 async function renderPanelPage({ guild = null, title = 'DOS COMMUNITY', body = '', sections = [], subtitle = 'DOS COMMUNITY • SILVER × CYAN' }) {
   const isMain = sections.length > 0;
-  const w = 1500, h = isMain ? 760 : 720, canvas = createCanvas(w, h), ctx = canvas.getContext('2d');
+  const w = 1500, h = isMain ? 790 : 720, canvas = createCanvas(w, h), ctx = canvas.getContext('2d');
   backdrop(ctx, w, h);
   header(ctx, w, title, subtitle);
   const logo = await safeImage(guild && guild.iconURL ? guild.iconURL({ extension: 'png', size: 128 }) : null);
@@ -345,12 +348,12 @@ async function renderAdminDashboard() {
   panel(ctx, 70, 245, 270, 570, 22, '#0B1B2A', C.silver);
   crown(ctx, 205, 300, 1.2, C.silver);
   text(ctx, 'DOS ADMIN', 205, 365, 25, C.white, 900, 'center');
-  const nav = ['الرئيسية', 'إدارة الأوامر', 'إدارة الأنظمة', 'إدارة الاقتصاد', 'إدارة المتجر', 'إدارة الرتب', 'إدارة المستويات', 'اللوحات والرسائل'];
+  const nav = ['الرئيسية', 'إدارة المتجر', 'الغرف الخاصة', 'اللوحات والرسائل', 'إدارة الأنظمة', 'العملات والمستويات', 'رتب التفاعل', 'رتب المستويات'];
   nav.forEach((label, i) => {
     panel(ctx, 90, 410 + i * 48, 230, 40, 10, i === 0 ? '#10405A' : '#101F30', i === 0 ? C.cyan : C.border);
     text(ctx, label, 295, 430 + i * 48, 17, C.white, 700);
   });
-  const modules = ['الاقتصاد (DOS Coin)', 'نظام البنك', 'المتجر', 'الرتب والتفاعل', 'المستويات (XP)', 'الشركات والشراكات', 'الألعاب والمسابقات', 'الفعاليات'];
+  const modules = ['العملات والمحفظة', 'المستويات (XP)', 'DOS SHOP', 'TOP والمتصدرون', 'اللوحة الرئيسية', 'رتب التفاعل', 'الفعاليات', 'الغرف الخاصة'];
   modules.forEach((label, i) => {
     const col = i % 4, row = Math.floor(i / 4), x = 375 + col * 265, y = 270 + row * 190;
     panel(ctx, x, y, 240, 150, 18, '#0B2032', C.cyan);
