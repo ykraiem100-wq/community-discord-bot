@@ -1,21 +1,20 @@
 {
-  "name": "community-discord-bot",
-  "version": "1.0.2",
+  "name": "dos-community-discord-bot",
+  "version": "2.0.0",
   "private": true,
   "type": "commonjs",
-  "description": "Arabic Discord community bot with leveling, wallet, shop and stats",
+  "description": "DOS Community Discord bot for Nowhost - Discord.js v14 / Node.js 20",
   "main": "src/index.js",
+  "engines": { "node": "20.x" },
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js && node --check src/db.js && node --check src/wallet.js"
-  },
-  "engines": {
-    "node": "20.x"
+    "prestart": "npm run check",
+    "check": "node --check src/index.js && node --check src/database.js && node --check src/wallet.js && node --check tests/smoke.js && node --check tests/migration.js",
+    "test": "node tests/smoke.js && node tests/migration.js"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^0.1.80",
-    "better-sqlite3": "^12.4.1",
-    "discord.js": "^14.28.1",
-    "dotenv": "^16.6.1"
+    "better-sqlite3": "12.4.1",
+    "discord.js": "14.28.1",
+    "dotenv": "16.6.1"
   }
 }
