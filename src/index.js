@@ -1,11 +1,12 @@
 'use strict';
 require('dotenv').config();
 const {
-  Client, GatewayIntentBits, Partials, EmbedBuilder,
+  Client, GatewayIntentBits, Partials, EmbedBuilder, AttachmentBuilder,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, REST, Routes, MessageFlags
 } = require('discord.js');
 const database = require('./database');
-const { createWalletEmbed } = require('./wallet');
+const { createWalletImage } = require('./wallet');
+const { renderTopLeaderboard } = require('./render');
 const { shopPayload, handleShopInteraction, processRoomExpirations, colorPickerPayload } = require('./shop');
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
@@ -65,17 +66,34 @@ function helpEmbed() {
     '.متصدرين كتابي / صوتي / عملات — ترتيب مختصر',
     '.إحصائيات — إحصائيات السيرفر',
     'للإدارة: /admin-panel — لوحة التحكم التفاعلية',
-    'للإدارة: .تعيين_قناة متجر #قناة أو .تعيين_قناة ترحيب #قناة',
+    'للإدارة: .تعيين_قناة متجر #قناة',
     'للإدارة: .رتبة_مستوى كتابة 10 @رتبة أو .رتبة_مستوى صوت 10 @رتبة'
   ].join('\n')).setFooter({ text: '7 XP لكل رسالة • 9 XP لكل دقيقة صوت • 250 XP = 1 DOS Coin (قابلة للتعديل من الإدارة)' });
 }
-function topEmbed(guildId, kind, period) {
-  const rows = database.leaderboard(guildId,kind,period);
-  const title = kind === 'coins' ? 'أغنى الأعضاء' : kind === 'voice' ? 'المتصدرون صوتياً' : kind === 'text' ? 'المتصدرون كتابياً' : 'متصدرو XP';
-  const periodLabel = ({all:'منذ البداية',daily:'آخر 24 ساعة',weekly:'آخر 7 أيام',monthly:'آخر 30 يوماً'})[period] || 'منذ البداية';
-  const description = rows.length ? rows.map((row,index) => `**${index+1}.** <@${row.user_id}> — **${Number(row.score).toLocaleString()}**`).join('\n') : 'لا توجد بيانات لهذه الفترة حتى الآن.';
-  return new EmbedBuilder().setColor(CYAN).setTitle(`🏆 TOP • ${title}`).setDescription(description).setFooter({ text: `DOS COMMUNITY • ${periodLabel}` }).setTimestamp();
+async function walletPayload(guild, user) {
+  const guildId = guild.id;
+  const profile = database.ensureMember(guildId, user.id);
+  const textRows = database.leaderboard(guildId, 'text', 'all');
+  const voiceRows = database.leaderboard(guildId, 'voice', 'all');
+  const textIndex = textRows.findIndex((row) => row.user_id === user.id);
+  const voiceIndex = voiceRows.findIndex((row) => row.user_id === user.id);
+  const image = await createWalletImage(profile, user, guildId, guild, {
+    text: textIndex >= 0 ? textIndex + 1 : 0,
+    voice: voiceIndex >= 0 ? voiceIndex + 1 : 0
+  });
+  return { files: [image] };
 }
+async function topPayload(guild, kind, period) {
+  const rows = database.leaderboard(guild.id, kind, period);
+  const entries = await Promise.all(rows.slice(0, 10).map(async (row) => {
+    let member = guild.members.cache.get(row.user_id);
+    if (!member) member = await guild.members.fetch(row.user_id).catch(() => null);
+    return { name: member ? member.displayName : ('عضو ' + String(row.user_id).slice(-4)), score: Number(row.score || 0) };
+  }));
+  const image = await renderTopLeaderboard({ guild, entries, period, metric: kind });
+  return { files: [new AttachmentBuilder(image, { name: 'dos-top.png' })] };
+}
+async function assignLevelRole
 async function assignLevelRole(member, kind, level) {
   if (!member || !level) return;
   const configured = database.roles(member.guild.id,kind).filter((row) => level >= row.level);
@@ -114,13 +132,13 @@ async function handleCommand(message) {
     if (command === 'محفظتي') {
       if (!database.featureEnabled(guildId,'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
       const user = message.mentions.users.first() || message.author;
-      return message.reply({ embeds:[createWalletEmbed(database.ensureMember(guildId,user.id),user,guildId)] });
+      return message.reply(await walletPayload(message.guild,user));
     }
     if (command === 'top' || command === 'متصدرين') {
       if (!database.featureEnabled(guildId,'top')) return message.reply('نظام TOP متوقف حالياً.');
       const category = args[0] === 'صوتي' ? 'voice' : args[0] === 'عملات' ? 'coins' : args[0] === 'الكل' ? 'all' : 'text';
       const period = ({يومي:'daily',أسبوعي:'weekly',شهري:'monthly','منذ_البداية':'all'})[args[1]] || 'all';
-      return message.reply({ embeds:[topEmbed(guildId,category,period)] });
+      return message.reply(await topPayload(message.guild,category,period));
     }
     if (command === 'إحصائيات') {
       const stats = database.stats(guildId);
@@ -135,7 +153,7 @@ async function handleCommand(message) {
       if (!database.featureEnabled(guildId,'shop')) return message.reply('المتجر متوقف حالياً.');
       const settings = database.settings(guildId);
       if (settings.shop_channel_id && message.channel.id !== settings.shop_channel_id) return message.reply({ content:`المتجر متاح في ${message.guild.channels.cache.get(settings.shop_channel_id) || 'القناة المخصصة'} فقط.` });
-      return message.reply(shopPayload(guildId,0));
+      return message.reply(await shopPayload(guildId,0));
     }
     if (command === 'طلبات') {
       if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
@@ -154,8 +172,8 @@ async function handleCommand(message) {
       if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
       const channel = message.mentions.channels.first();
       if (!channel) return message.reply('اذكر القناة المطلوبة.');
-      const key = args[0] === 'ترحيب' ? 'welcome_channel_id' : args[0] === 'متجر' ? 'shop_channel_id' : null;
-      if (!key) return message.reply('استخدم: .تعيين_قناة متجر #قناة أو .تعيين_قناة ترحيب #قناة.');
+      const key = args[0] === 'متجر' ? 'shop_channel_id' : null;
+      if (!key) return message.reply('استخدم: .تعيين_قناة متجر #قناة.');
       database.setSetting(guildId,key,channel.id);
       return message.reply(`تم تعيين قناة ${args[0]}: ${channel}`);
     }
@@ -184,19 +202,19 @@ async function handleSlashCommand(interaction) {
   if (interaction.commandName === 'wallet') {
     if (!database.featureEnabled(guildId,'economy')) return interaction.reply({content:'المحفظة متوقفة مؤقتاً.',flags:MessageFlags.Ephemeral});
     const user = interaction.options.getUser('member') || interaction.user;
-    return interaction.reply({embeds:[createWalletEmbed(database.ensureMember(guildId,user.id),user,guildId)]});
+    return interaction.reply({ ...(await walletPayload(interaction.guild,user)), flags: MessageFlags.Ephemeral });
   }
   if (interaction.commandName === 'top') {
     if (!database.featureEnabled(guildId,'top')) return interaction.reply({content:'نظام TOP متوقف حالياً.',flags:MessageFlags.Ephemeral});
     const category = interaction.options.getString('category') || 'all';
     const period = interaction.options.getString('period') || 'all';
-    return interaction.reply({embeds:[topEmbed(guildId,category,period)]});
+    return interaction.reply(await topPayload(interaction.guild,category,period));
   }
   if (interaction.commandName === 'shop') {
     if (!database.featureEnabled(guildId,'shop')) return interaction.reply({content:'المتجر متوقف حالياً.',flags:MessageFlags.Ephemeral});
     const settings = database.settings(guildId);
     if (settings.shop_channel_id && interaction.channelId !== settings.shop_channel_id) return interaction.reply({content:`المتجر متاح في <#${settings.shop_channel_id}> فقط.`,flags:MessageFlags.Ephemeral});
-    return interaction.reply(shopPayload(guildId,0));
+    return interaction.reply(await shopPayload(guildId,0));
   }
   if (interaction.commandName === 'color-selection') {
     const orderId = interaction.options.getInteger('order_id');
@@ -228,7 +246,7 @@ client.on('messageCreate',async (message) => {
   const trimmed = message.content.trim();
   if (/^top$/i.test(trimmed)) {
     if (!database.featureEnabled(message.guild.id,'top')) return;
-    return message.reply({embeds:[topEmbed(message.guild.id,'all','all')]});
+    return message.reply(await topPayload(message.guild,'all','all'));
   }
   if (trimmed.startsWith(prefix)) return handleCommand(message);
   try {
@@ -255,24 +273,6 @@ client.on('voiceStateUpdate',async (oldState,newState) => {
   } catch (error) { console.error('[VOICE] State update failed:',error); }
 });
 
-client.on('guildMemberAdd',async (member) => {
-  if (!database.featureEnabled(member.guild.id,'welcome')) return;
-  try {
-    const settings = database.settings(member.guild.id);
-    if (!settings.welcome_channel_id) return;
-    const channel = member.guild.channels.cache.get(settings.welcome_channel_id);
-    if (!channel || !channel.isTextBased() || !channel.send) return;
-    const embed = new EmbedBuilder().setColor(CYAN).setTitle('Welcome to '+member.guild.name)
-      .setDescription('أهلاً '+member+' في مجتمعنا! نتمنى لك وقتاً ممتعاً.')
-      .setThumbnail(member.user.displayAvatarURL()).setTimestamp();
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('welcome_rules').setLabel('قوانين السيرفر').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('welcome_info').setLabel('معلومات السيرفر').setStyle(ButtonStyle.Primary)
-    );
-    await channel.send({embeds:[embed],components:[row]});
-  } catch (error) { console.error('[WELCOME] Send failed:',error); }
-});
-
 client.on('interactionCreate',async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) return await handleSlashCommand(interaction);
@@ -290,8 +290,6 @@ client.on('interactionCreate',async (interaction) => {
         const handled = await handleShopInteraction(interaction,client);
         if (handled !== false) return handled;
       }
-      if (interaction.customId === 'welcome_rules') return interaction.reply({content:'يرجى مراجعة قناة القوانين في السيرفر.',flags:MessageFlags.Ephemeral});
-      if (interaction.customId === 'welcome_info') return interaction.reply({content:'أهلاً بك! استخدم /help لمعرفة الأوامر.',flags:MessageFlags.Ephemeral});
     }
   } catch (error) {
     console.error('[INTERACTION] Failed:',error);

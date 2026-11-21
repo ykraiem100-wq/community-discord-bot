@@ -1,12 +1,13 @@
 'use strict';
 const {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, ChannelType, PermissionFlagsBits, MessageFlags
 } = require('discord.js');
 const database = require('./database');
 const { CYAN } = require('./panels');
+const { renderShopGrid } = require('./render');
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 9;
 const COLOR_STEPS = [0, 51, 102, 153, 204, 255];
 const COLOR_PALETTE = [];
 for (const r of COLOR_STEPS) for (const g of COLOR_STEPS) for (const b of COLOR_STEPS) {
@@ -20,23 +21,16 @@ function currencyLabel(product) {
 function productIcon(type) {
   return ({ color: '🎨', text_room: '📝', voice_room: '🔊', role: '👑', digital: '📦', manual: '🛠️' })[type] || '🛍️';
 }
-function shopPayload(guildId, page) {
+async function shopPayload(guildId, page) {
   if (!database.featureEnabled(guildId, 'shop')) {
-    return { embeds: [new EmbedBuilder().setColor(CYAN).setTitle('🛍️ DOS SHOP').setDescription('المتجر مغلق مؤقتاً. تابع إعلانات DOS COMMUNITY لمعرفة موعد عودته.')], components: [] };
+    return { content: '🛍️ DOS SHOP مغلق مؤقتاً. تابع إعلانات DOS COMMUNITY لمعرفة موعد عودته.', components: [] };
   }
   const products = database.products(guildId, true);
   const maxPage = Math.max(0, Math.ceil(products.length / PAGE_SIZE) - 1);
   const safePage = Math.min(Math.max(0, Number(page) || 0), maxPage);
   const current = products.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-  const embeds = current.length ? current.map((product, index) => {
-    const embed = new EmbedBuilder().setColor(CYAN)
-      .setTitle(`${productIcon(product.product_type)} ${product.name}`.slice(0, 100))
-      .setDescription((product.description || 'منتج من متجر DOS').slice(0, 250))
-      .addFields({ name: 'السعر', value: currencyLabel(product), inline: true })
-      .setFooter({ text: `DOS COMMUNITY • DOS SHOP • صفحة ${safePage + 1}/${maxPage + 1} • منتج ${safePage * PAGE_SIZE + index + 1}` });
-    if (product.image_url && /^https:\/\//i.test(product.image_url)) embed.setImage(product.image_url);
-    return embed;
-  }) : [new EmbedBuilder().setColor(CYAN).setTitle('🛍️ DOS SHOP').setDescription('لا توجد منتجات متاحة حالياً.').setFooter({ text: 'DOS COMMUNITY • Silver × Cyan × Gold' })];
+  const visualItems = current.map((product) => ({ ...product, display_price: currencyLabel(product) }));
+  const image = await renderShopGrid(visualItems, 'DOS SHOP');
   const rows = [];
   if (current.length) {
     const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('اختر المنتج الذي تريد شراءه').setMinValues(1).setMaxValues(1)
@@ -45,13 +39,18 @@ function shopPayload(guildId, page) {
   }
   if (maxPage > 0) {
     const row = new ActionRowBuilder();
-    if (safePage > 0) row.addComponents(new ButtonBuilder().setCustomId(`shop:page:${safePage - 1}`).setLabel('السابق').setStyle(ButtonStyle.Secondary));
-    if (safePage < maxPage) row.addComponents(new ButtonBuilder().setCustomId(`shop:page:${safePage + 1}`).setLabel('التالي').setStyle(ButtonStyle.Secondary));
+    if (safePage > 0) row.addComponents(new ButtonBuilder().setCustomId('shop:page:' + (safePage - 1)).setLabel('السابق').setStyle(ButtonStyle.Secondary));
+    row.addComponents(new ButtonBuilder().setCustomId('shop:page:current').setLabel('صفحة ' + (safePage + 1) + '/' + (maxPage + 1)).setStyle(ButtonStyle.Secondary).setDisabled(true));
+    if (safePage < maxPage) row.addComponents(new ButtonBuilder().setCustomId('shop:page:' + (safePage + 1)).setLabel('التالي').setStyle(ButtonStyle.Secondary));
     rows.push(row);
   }
-  return { embeds, components: rows };
+  return {
+    content: '**DOS SHOP** • صفحة ' + (safePage + 1) + '/' + (maxPage + 1) + '\nاختر المنتج من القائمة أسفل الصورة.',
+    files: [new AttachmentBuilder(image, { name: 'dos-shop.png' })],
+    attachments: [],
+    components: rows
+  };
 }
-
 function colorPickerPayload(guildId, purchaseId, page) {
   const totalPages = Math.ceil(COLOR_PALETTE.length / PAGE_SIZE);
   const safePage = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
@@ -104,7 +103,7 @@ async function publishShop(guild, channel) {
     const oldChannel = await guild.channels.fetch(settings.shop_channel_id).catch(() => null);
     if (oldChannel && oldChannel.isTextBased()) message = await oldChannel.messages.fetch(settings.shop_message_id).catch(() => null);
   }
-  const payload = shopPayload(guild.id,0);
+  const payload = await shopPayload(guild.id,0);
   if (message && message.channelId === channel.id) {
     await message.edit(payload);
     return message;
@@ -159,7 +158,7 @@ async function deliverProduct(client, guildId, purchaseId, actorId) {
 async function handleShopInteraction(interaction, client) {
   const parts = interaction.customId.split(':');
   if (parts[0] === 'shop' && parts[1] === 'page') {
-    return interaction.update(shopPayload(interaction.guildId, Number(parts[2]) || 0));
+    return interaction.update(await shopPayload(interaction.guildId, Number(parts[2]) || 0));
   }
   if (parts[0] === 'shop' && parts[1] === 'buy' && interaction.isStringSelectMenu()) {
     if (!database.featureEnabled(interaction.guildId, 'shop')) return interaction.reply({ content: 'المتجر متوقف حالياً.', flags: MessageFlags.Ephemeral });
