@@ -56,7 +56,7 @@ async function shopAdminPayload(guildId) {
     rows.push(new ActionRowBuilder().addComponents(menu));
   }
   rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return { embeds: [adminEmbed('إدارة DOS SHOP', products.map((p) => `#${p.id} • ${p.name} • ${p.price} ${p.currency} • ${p.active ? 'متاح' : 'متوقف'}`).join('\\n') || 'لا توجد منتجات بعد. أضف أول منتج من الزر أدناه.')], components: rows };
+  return { embeds: [adminEmbed('إدارة DOS SHOP', products.map((p) => `#${p.id} • ${p.name} • ${p.price} ${p.currency} • ${p.active ? 'متاح' : 'متوقف'}`).join(String.fromCharCode(10)) || 'لا توجد منتجات بعد. أضف أول منتج من الزر أدناه.')], components: rows };
 }
 function shopSettingsPayload(guildId) {
   const settings = database.settings(guildId);
