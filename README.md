@@ -59,7 +59,7 @@ Private room products use DOS Coin, last 30 days, send a reminder three days bef
 
 Cash products are separate from DOS Coin. A cash order can show an external HTTPS payment link, but payment is **not automatically verified** by the bot. An Administrator must verify receipt in the external payment provider before approving delivery. Cash refunds, if needed, are handled manually outside Discord. Automatic payment capture requires a separately integrated payment provider/webhook and is not included in this version. To keep room renewals reliable, private-room products are restricted to DOS Coin at present.
 
-The DOS SHOP renders a metallic silver-and-cyan PNG with three products per row and up to nine products per page, then provides the real purchase select menu and page buttons below the image. Product names, prices and uploaded product images are read from the configured product records.
+The DOS SHOP uses the exact approved six-card artwork (three columns × two rows) and displays up to six products per page. Product names, prices and uploaded product images are read from the configured product records; the real purchase select menu and page buttons remain below the PNG.
 
 ## Data and tests
 
@@ -71,25 +71,23 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 
 - `/wallet` و`.محفظتي` يرسلان بطاقة المحفظة كملف PNG مباشر، مع فصل تقدّم الكتابة عن الصوت.
 - `/top` و`TOP` يرسلان صورة المتصدرين كملف PNG مباشر.
-- `/shop` و`.المتجر` يرسلان صورة منتجات بثلاثة أعمدة (حتى 9 منتجات في الصفحة) مع قائمة شراء وأزرار صفحات Discord أسفل الصورة.
+- `/shop` و`.المتجر` يرسلان صورة DOS SHOP الأصلية بثلاثة أعمدة وصفّين (حتى 6 منتجات في الصفحة) مع قائمة شراء وأزرار صفحات Discord أسفل الصورة.
 - لوحة DOS الرئيسية وصفحات القوانين والمعلومات والنظام والفعاليات تُرسل كصور PNG مباشرة؛ وتبقى أزرار التفاعل الحقيقية كعناصر Discord أسفل صورة اللوحة.
-- تستخدم خلفيات PNG الجديدة داخل `assets/templates/`، ويضيف البوت فوقها البيانات الحقيقية. صورك الأصلية والقصاصات المرجعية موجودة في `assets/design-references/`.
+- تستخدم خلفيات PNG المقتطعة من صورك الأصلية داخل `assets/templates/`، ويضيف البوت فوقها البيانات الحقيقية في المواضع المتغيرة فقط. صور المصدر الكاملة والقصاصات المرجعية موجودة في `assets/design-references/`.
 - لا يجري تعديل مخطط بيانات الأعضاء أو حذف قاعدة البيانات بسبب إضافة الرسومات.
 
-## القوالب والصور الجديدة
+## القوالب والصور المعتمدة
 
-تم استبدال مكتبة القوالب القديمة بتسعة أصول تشغيلية نظيفة ومتوافقة مع Node.js 20 وNowhost. هذه الخلفيات لا تحتوي أرصدة أو أسماء تجريبية؛ يقوم `src/render.js` برسم الاسم والرصيد وXP والرتب والأسعار من بيانات البوت الفعلية.
+القوالب التشغيلية هي قصاصات أصلية من الصور التي اخترتها، وليست إعادة تصميم. يحتفظ البوت بالإطار المعدني والشعار والزخرفة والتوزيع كما في المرجع، ويضع البيانات المتغيرة فوق المناطق المناسبة فقط.
 
-- `dos-community-banner.png`: شعار DOS COMMUNITY المقتطع من مرجعك ويظهر في أعلى الصور.
-- `wallet-base.png`: المحفظة.
-- `leaderboard-base.png`: المتصدرون.
-- `shop-base.png`: DOS SHOP بثلاثة أعمدة وحتى 9 منتجات في الصفحة.
-- `main-panel-base.png`: اللوحة الرئيسية بخمسة أقسام.
-- `content-panel-base.png`: رسائل القوانين والمعلومات ورتب التفاعل والفعاليات.
-- `level-system-base.png`: مراحل المستويات ومعدلات XP والتحويل الحالية.
-- `admin-dashboard-base.png`: الصفحة الرئيسية للوحة الإدارة.
-- `admin-shop-base.png`: صفحة إدارة منتجات المتجر.
+- `wallet-base.png`: بطاقة المحفظة.
+- `leaderboard-base.png`: لوحة TOP والمتصدرين.
+- `shop-base.png`: واجهة DOS SHOP الأصلية بستة مواضع فارغة للمنتجات، مع الإبقاء على الشارات وإطارات الأسعار.
+- `main-panel-base.png`: لوحة السيرفر العامة بخمسة أقسام؛ نص الترحيب يُكتب في المساحة الأصلية الفارغة، والأزرار الحقيقية تُرسل أسفلها.
+- `content-panel-base.png`: بطاقة رسالة القوانين/المعلومات؛ ويُرفق النص الكامل في رسالة Discord حتى لا يُقص المحتوى الطويل.
+- `level-system-base.png`: إنفوجرافيك مراحل المستويات.
+- `level-up-base.png`: إعلان الوصول إلى مستوى جديد.
+- `admin-dashboard-base.png`: صورة لوحة الإدارة الأصلية كما هي؛ تُعرض الإحصائيات الحية في بطاقة Discord تحتها حتى لا يتغير شكل الصورة المختارة.
+- `admin-shop-base.png`: صورة إدارة المتجر الأصلية كما هي؛ تظهر المنتجات الفعلية وأسعارها وحالاتها في بطاقة Discord وقائمة الاختيار أسفلها.
 
-الصور التي أرسلتها محفوظة كما هي في `assets/design-references/`، مع قصاصات منفصلة داخل `assets/design-references/crops/` لتسهيل مراجعة كل شاشة. القصاصات مرجع بصري فقط ولا تُعرض ببيانات تجريبية في Discord.
-
-راجع `assets/templates/README.txt` و`assets/templates/images-map.json` لمعرفة ربط كل خلفية بوظيفة الرسم التي تستخدمها. لا تحذف الملفات التسعة أو تغيّر أسماءها. إضافة هذه الأصول لا تعدّل قاعدة البيانات ولا تمسح العملات أو XP.
+الصور المصدرية الخمس والقصاصات موجودة في `assets/design-references/`. خريطة ربط الملفات ووظائفها في `assets/templates/images-map.json`. لا تحذف ملفات القوالب التسعة ولا تغيّر أسماءها. لا تحتوي الحزمة على قاعدة بيانات الإنتاج أو ملف `.env` أو رمز Discord.

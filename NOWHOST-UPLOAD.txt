@@ -1,13 +1,15 @@
 DOS COMMUNITY — رفع الحزمة النظيفة على Nowhost
 ================================================
 
-1) فك ضغط ملف DOS-COMMUNITY-Nowhost-Cyan-Templates.zip.
+1) فك ضغط ملف DOS-COMMUNITY-Nowhost-Original-Designs.zip.
 2) افتح مجلد DOS-COMMUNITY-Nowhost.
 3) ارفع محتويات هذا المجلد إلى جذر مشروعك في Nowhost؛ يجب أن يكون package.json بجانب مجلدي src و assets.
 4) اختر Node.js 20.x.
 5) أمر التثبيت: npm install
 6) أمر التشغيل: npm start
 7) احتفظ بمتغير DATA_DIR الحالي الذي يشير إلى التخزين الدائم، مثلاً /app/data.
+
+تتبّع الدعوات: امنح البوت صلاحية Manage Server لقراءة استخدام روابط الدعوة وتحديد صاحب الدعوة. ولأمر .رابط امنحه Create Instant Invite في قناة إصدار الرابط. يبدأ العد من وقت تفعيل التتبع ولا يستعيد الدعوات القديمة.
 
 متغيرات البيئة المطلوبة موضحة في .env.example:
 DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID (اختياري),
