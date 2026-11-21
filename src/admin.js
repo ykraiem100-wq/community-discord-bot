@@ -94,9 +94,9 @@ function economyPayload(guildId) {
     message_xp: database.getConfig(guildId,'message_xp','7'),
     voice_xp: database.getConfig(guildId,'voice_xp','9'),
     xp_per_coin: database.getConfig(guildId,'xp_per_coin','250'),
-    easyBase: database.getConfig(guildId,'level_easy_base','100'), easyStep: database.getConfig(guildId,'level_easy_step','4'),
-    mediumBase: database.getConfig(guildId,'level_medium_base','300'), mediumStep: database.getConfig(guildId,'level_medium_step','10'),
-    hardBase: database.getConfig(guildId,'level_hard_base','800'), hardStep: database.getConfig(guildId,'level_hard_step','20')
+    easyBase: database.getConfig(guildId,'level_easy_base','120'), easyStep: database.getConfig(guildId,'level_easy_step','8'),
+    mediumBase: database.getConfig(guildId,'level_medium_base','650'), mediumStep: database.getConfig(guildId,'level_medium_step','24'),
+    hardBase: database.getConfig(guildId,'level_hard_base','2200'), hardStep: database.getConfig(guildId,'level_hard_step','120')
   };
   const embed = adminEmbed('📈 العملات والمستويات', `**الرسائل:** ${values.message_xp} XP\n**كل دقيقة فويس:** ${values.voice_xp} XP\n**التحويل:** كل ${values.xp_per_coin} XP = 1 DOS Coin\n\n**1–50:** سهل ← متوسط (${values.easyBase} + ${values.easyStep} لكل مستوى)\n**51–100:** متوسط ← صعب (${values.mediumBase} + ${values.mediumStep})\n**101+:** صعب (${values.hardBase} + ${values.hardStep})`);
   return { embeds: [embed], components: [
@@ -356,9 +356,9 @@ async function handleAdminInteraction(interaction, client) {
   if (parts[1] === 'economy' && parts[2] === 'curve') {
     const modal = new ModalBuilder().setCustomId('admin:economy:save-curve').setTitle('تعديل صعوبة المستويات')
       .addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('easy').setLabel('1-50: البداية والزيادة (100,4)').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_easy_base','100')},${database.getConfig(interaction.guildId,'level_easy_step','4')}`).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('medium').setLabel('المستويات 51–100: البداية, الزيادة').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_medium_base','300')},${database.getConfig(interaction.guildId,'level_medium_step','10')}`).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hard').setLabel('المستوى 101+: البداية, الزيادة').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_hard_base','800')},${database.getConfig(interaction.guildId,'level_hard_step','20')}`).setRequired(true))
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('easy').setLabel('1-50: البداية والزيادة (100,4)').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_easy_base','120')},${database.getConfig(interaction.guildId,'level_easy_step','8')}`).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('medium').setLabel('المستويات 51–100: البداية, الزيادة').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_medium_base','650')},${database.getConfig(interaction.guildId,'level_medium_step','24')}`).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hard').setLabel('المستوى 101+: البداية, الزيادة').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_hard_base','2200')},${database.getConfig(interaction.guildId,'level_hard_step','120')}`).setRequired(true))
       );
     return interaction.showModal(modal);
   }
