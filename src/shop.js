@@ -220,7 +220,16 @@ async function handleShopInteraction(interaction, client) {
       let roleId = database.getCustomColorRole(guildId, interaction.user.id);
       let role = roleId ? await guild.roles.fetch(roleId).catch(() => null) : null;
       if (role) await role.edit({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
-      else role = await guild.roles.create({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
+      else {
+        role = await guild.roles.create({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
+        const memberRole = guild.roles.cache.find((item) => item.name.toLowerCase() === 'member');
+        if (memberRole) {
+          const targetPosition = Math.min(memberRole.position + 1, botMember.roles.highest.position - 1);
+          if (targetPosition <= memberRole.position) throw new Error('ارفع رتبة البوت فوق رتبة Member حتى يستطيع وضع لونك فوقها.');
+          await role.setPosition(targetPosition);
+          role = await guild.roles.fetch(role.id);
+        }
+      }
       if (role.position >= botMember.roles.highest.position) throw new Error('رتبة اللون أعلى من رتبة البوت ولا يمكن إسنادها.');
       await member.roles.add(role, 'DOS custom color role');
       database.setCustomColorRole(guildId, interaction.user.id, role.id);
