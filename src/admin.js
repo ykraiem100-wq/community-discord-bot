@@ -1,11 +1,12 @@
 'use strict';
 const {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
   ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ChannelType, PermissionsBitField, MessageFlags
 } = require('discord.js');
 const database = require('./database');
 const { CYAN, DEFAULT_CONTENT, makeContentEmbed, publishMainPanel } = require('./panels');
+const { renderAdminDashboard, renderAdminShop } = require('./render');
 const { deliverProduct, publishShop, refreshPublishedShop } = require('./shop');
 
 const FEATURES = [
@@ -27,7 +28,7 @@ function isAdmin(member, userId, permissionBits) {
 function adminEmbed(title, description) {
   return new EmbedBuilder().setColor(CYAN).setTitle(title).setDescription(description).setFooter({ text: 'DOS CONTROL PANEL • الإدارة فقط' });
 }
-function homePayload() {
+async function homePayload(guildId) {
   const menu = new StringSelectMenuBuilder().setCustomId('admin:nav').setPlaceholder('اختر القسم الذي تريد إدارته')
     .addOptions(
       { label: 'إدارة المتجر', value: 'shop', description: 'إضافة المنتجات وتعديلها والطلبات', emoji: '🛍️' },
@@ -39,19 +40,15 @@ function homePayload() {
       { label: 'رتب المستويات', value: 'level_roles', description: 'ربط رتب بمستويات الكتابة والصوت', emoji: '🏅' },
       { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' }
     );
-  const embed = adminEmbed('👑 DOS CONTROL PANEL', 'لوحة الإدارة المركزية لسيرفر DOS COMMUNITY.\nادخل إلى أي قسم لتعديل إعداداته وحفظ التغييرات.\n\n**Silver × Cyan**');
-  embed.addFields(
-    { name: '🛍️ المتجر', value: 'إضافة منتجات، الأسعار، الصور، تعطيل المنتجات، وإعداد الغرف.', inline: true },
-    { name: '📝 الرسائل', value: 'تعديل القوانين والمعلومات ونصوص الأزرار.', inline: true },
-    { name: '⏯️ الأنظمة', value: 'تشغيل وإيقاف كل نظام بشكل مستقل.', inline: true }
-  );
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(menu)] };
+  const image = await renderAdminDashboard();
+  return {
+    files: [new AttachmentBuilder(image, { name: 'dos-admin-dashboard.png' })],
+    components: [new ActionRowBuilder().addComponents(menu)]
+  };
 }
-function shopAdminPayload(guildId) {
+async function shopAdminPayload(guildId) {
   const products = database.products(guildId, false);
-  const text = products.slice(0, 20).map((p) => `**#${p.id} ${p.name}** — ${p.price} ${p.currency === 'cash' ? 'نقداً' : 'DOS Coin'} — ${p.product_type} — ${p.active ? '🟢 متاح' : '⛔ متوقف'}`);
-  const embed = adminEmbed('🛍️ إدارة DOS SHOP', text.join('\n') || 'لم تضف أي منتجات بعد.');
-  embed.addFields({ name: 'إعداد الغرف', value: 'مدة الغرفة الافتراضية 30 يوماً، والتجديد يضيف 30 يوماً إلى تاريخ الانتهاء الحالي، مع تنبيه قبل 3 أيام.' });
+  const image = await renderAdminShop(products);
   const rows = [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('admin:shop:add').setLabel('إضافة منتج').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('admin:shop:pending').setLabel('طلبات معلقة').setEmoji('🧾').setStyle(ButtonStyle.Primary),
@@ -60,11 +57,14 @@ function shopAdminPayload(guildId) {
   )];
   if (products.length) {
     const menu = new StringSelectMenuBuilder().setCustomId('admin:shop:select').setPlaceholder('اختر منتجاً لإدارته')
-      .addOptions(products.slice(0,25).map((p) => ({ label: `#${p.id} ${p.name}`.slice(0,100), value: String(p.id), description: `${p.price} ${p.currency === 'cash' ? 'نقداً' : 'Coin'} • ${p.active ? 'متاح' : 'متوقف'}`.slice(0,100) })));
+      .addOptions(products.slice(0,25).map((p) => ({ label: '#' + p.id + ' ' + p.name.slice(0,90), value: String(p.id), description: p.price + ' ' + (p.currency === 'cash' ? 'نقداً' : 'DOS Coin') + ' • ' + (p.active ? 'متاح' : 'متوقف') })));
     rows.push(new ActionRowBuilder().addComponents(menu));
   }
   rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return { embeds: [embed], components: rows };
+  return {
+    files: [new AttachmentBuilder(image, { name: 'dos-shop-admin.png' })],
+    components: rows
+  };
 }
 function shopSettingsPayload(guildId) {
   const settings = database.settings(guildId);
@@ -206,10 +206,10 @@ async function handleAdminInteraction(interaction, client) {
   if (parts[0] !== 'admin') return false;
   if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions)) return interaction.reply({ content: 'هذه اللوحة للإدارة فقط.', flags: MessageFlags.Ephemeral });
 
-  if (parts[1] === 'home') return interaction.update(homePayload());
+  if (parts[1] === 'home') return interaction.update(await homePayload(interaction.guildId));
   if (parts[1] === 'nav' && interaction.isStringSelectMenu()) {
     const section = interaction.values[0];
-    const payload = section === 'shop' ? shopAdminPayload(interaction.guildId)
+    const payload = section === 'shop' ? await shopAdminPayload(interaction.guildId)
       : section === 'rooms' ? roomsPayload(interaction.guildId)
       : section === 'content' ? contentAdminPayload()
       : section === 'features' ? featuresPayload(interaction.guildId)
