@@ -59,7 +59,7 @@ Private room products use DOS Coin, last 30 days, send a reminder three days bef
 
 Cash products are separate from DOS Coin. A cash order can show an external HTTPS payment link, but payment is **not automatically verified** by the bot. An Administrator must verify receipt in the external payment provider before approving delivery. Cash refunds, if needed, are handled manually outside Discord. Automatic payment capture requires a separately integrated payment provider/webhook and is not included in this version. To keep room renewals reliable, private-room products are restricted to DOS Coin at present.
 
-Discord message embeds display product cards vertically; the shop uses per-product embeds with images plus a select menu and pagination. The graphic mockups are visual references, not custom image rendering inside Discord.
+DOS SHOP posts a three-column PNG product sheet with prices and product images; the purchase select menu and page buttons remain real Discord components below it. The admin home and shop-management screens also post branded metallic-cyan PNG dashboards with their real navigation and management controls underneath. The public main panel uses the same visual frame and keeps its five live buttons arranged as two, two, and one.
 
 ## Data and tests
 
