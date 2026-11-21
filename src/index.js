@@ -195,9 +195,10 @@ async function handleCommand(message) {
       if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
       const channel = message.mentions.channels.first();
       if (!channel) return message.reply('اذكر القناة المطلوبة.');
-      const key = args[0] === 'متجر' ? 'shop_channel_id' : null;
-      if (!key) return message.reply('استخدم: .تعيين_قناة متجر #قناة.');
-      database.setSetting(guildId,key,channel.id);
+      const key = args[0] === 'متجر' ? 'shop_channel_id' : args[0] === 'لفل' ? 'level_channel_id' : null;
+      if (!key) return message.reply('استخدم: .تعيين_قناة متجر #قناة أو .تعيين_قناة لفل #قناة.');
+      if (key === 'level_channel_id') database.setConfig(guildId,key,channel.id,userId);
+      else database.setSetting(guildId,key,channel.id);
       return message.reply(`تم تعيين قناة ${args[0]}: ${channel}`);
     }
     if (command === 'رتبة_مستوى') {
@@ -219,8 +220,7 @@ async function handleSlashCommand(interaction) {
   if (!interaction.guildId || !interaction.guild) return interaction.reply({ content: 'استخدم هذا الأمر داخل سيرفر DOS COMMUNITY.', flags: MessageFlags.Ephemeral });
   const guildId = interaction.guildId;
   if (interaction.commandName === 'admin-panel') {
-    if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
-    return interaction.reply({ ...await homePayload(interaction.guildId),flags:MessageFlags.Ephemeral });
+    return interaction.reply(await homePayload(interaction.guildId));
   }
   if (interaction.commandName === 'wallet') {
     if (!database.featureEnabled(guildId,'economy')) return interaction.reply({content:'المحفظة متوقفة مؤقتاً.',flags:MessageFlags.Ephemeral});
