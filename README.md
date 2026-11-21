@@ -21,7 +21,7 @@ Arabic Discord bot built with Node.js 20 and discord.js v14.
 - Admin: `.طلبات`, `.قبول ID`, `.رفض ID`.
 
 ## Run
-Use Node.js 20.x. Install dependencies with `npm install`, then set `DISCORD_TOKEN` in the host's Environment Variables and run `npm start`. Optional: `BOT_PREFIX` (default `.`) and `DATA_DIR` (default `./data`).
+Use Node.js 20.x and the repository root (the folder containing `package.json`). Nowhost detects Node from the package manifest, installs dependencies from `package.json`, and starts the process with `npm start` (`node src/index.js`). Do not set a different start command or a Python runtime.\n\n### Nowhost environment variables\n- `DISCORD_TOKEN` — required bot token; store as a secret.\n- `DISCORD_CLIENT_ID` — recommended by Nowhost for its bot invite link. It is not required by this prefix-command code to log in.\n- `BOT_PREFIX` — optional, defaults to `.`.\n- `DATA_DIR` — optional, defaults to `./data`; point it to a persistent data directory if your Nowhost plan exposes one.\n\nNo `GUILD_ID`, `OWNER_ID`, or slash-command registration is needed by this version. The bot currently uses prefix commands, not slash commands. Run `npm run check` to syntax-check the JavaScript files.
 
 Keep the SQLite database directory persistent on your host and do not commit tokens or database files.
 
