@@ -38,7 +38,7 @@ Enable Message Content Intent and Server Members Intent under Application → Bo
 - .المتجر, .شراء 1
 - .إحصائيات
 - Admin: .تعيين_قناة متجر #channel, .تعيين_قناة ترحيب #channel
-- Admin: .رتبة_مستوى كتابة 10 @channel, .رتبة_مستوى صوت 10 @role
+- Admin: .رتبة_مستوى كتابة 10 @role, .رتبة_مستوى صوت 10 @role
 - Admin: .طلبات, .قبول ID, .رفض ID
 
 ## Economy
