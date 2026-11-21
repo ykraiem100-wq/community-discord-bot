@@ -20,3 +20,11 @@ jobs:
         run: npm run check
       - name: Run tests
         run: npm test
+      - name: Package source ZIP
+        run: git archive --format=zip --output=DOS-COMMUNITY-Nowhost.zip HEAD
+      - name: Upload ready-to-download ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: DOS-COMMUNITY-Nowhost
+          path: DOS-COMMUNITY-Nowhost.zip
+          retention-days: 14
