@@ -1,10 +1,16 @@
 {
   "name": "community-discord-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "private": true,
+  "type": "commonjs",
   "description": "Arabic Discord community bot with leveling, wallet, shop and stats",
   "main": "src/index.js",
-  "scripts": { "start": "node src/index.js" },
-  "engines": { "node": "20.x" },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
     "better-sqlite3": "^12.4.1",
