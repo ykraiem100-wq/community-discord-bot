@@ -30,6 +30,11 @@ try {
   assert.equal(db.settings(guild).shop_channel_id, 'shop');
   db.setRole(guild, 'text', 5, 'role');
   assert.equal(db.roles(guild, 'text')[0].role_id, 'role');
+  db.saveInviteSnapshots(guild, [{ code: 'personal-code', inviterId: 'inviter-test', uses: 0, maxUses: 0 }]);
+  assert.equal(db.inviteSnapshots(guild)[0].code, 'personal-code');
+  assert.equal(db.recordInviteJoin(guild, 'joined-test', 'inviter-test', 'personal-code'), true);
+  assert.equal(db.recordInviteJoin(guild, 'joined-test', 'inviter-test', 'personal-code'), false);
+  assert.equal(db.inviteCount(guild, 'inviter-test'), 1);
   db.close();
   console.log('Smoke test passed.');
 } finally {

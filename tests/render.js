@@ -4,13 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   renderWallet, renderTopLeaderboard, renderShopGrid, renderPanelPage,
-  renderMainPanel, renderLevelSystemPage, renderAdminDashboard, renderAdminShop, TEMPLATE_DIR
+  renderMainPanel, renderLevelSystemPage, renderLevelUpBanner, renderAdminDashboard, renderAdminShop, TEMPLATE_DIR
 } = require('../src/render');
 
 async function main() {
   for (const filename of [
-    'dos-community-banner.png', 'wallet-base.png', 'leaderboard-base.png', 'shop-base.png', 'main-panel-base.png',
-    'content-panel-base.png', 'level-system-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png'
+    'wallet-base.png', 'leaderboard-base.png', 'shop-base.png', 'main-panel-base.png',
+    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png'
   ]) {
     assert.ok(fs.existsSync(path.join(TEMPLATE_DIR, filename)), `missing current template ${filename}`);
   }
@@ -24,6 +24,7 @@ async function main() {
     await renderPanelPage({ title: 'DOS COMMUNITY', body: 'اختبار صورة اللوحة', sections: ['القوانين', 'المعلومات', 'رتب التفاعل', 'النظام', 'الفعاليات'] }),
     await renderMainPanel({ title: 'DOS COMMUNITY', body: 'مرحباً بك في مجتمع DOS' }),
     await renderLevelSystemPage({ messageXp: 7, voiceXp: 9, xpPerCoin: 250 }),
+    await renderLevelUpBanner({ level: 42 }),
     await renderAdminDashboard({ stats: { members: 25, messages: 1500, coins: 1200, voice_seconds: 3600 }, features: { shop: true } }),
     await renderAdminShop([{ name: 'لون خاص', price: 200, currency: 'coin', active: true }])
   ];
