@@ -1,4 +1,4 @@
-name: DOS Community Bot CI
+name: DOS Community Bot CI # includes metallic-cyan design branch
 
 on:
   push:
