@@ -41,7 +41,7 @@ async function shopPayload(guildId, page) {
     rows.push(row);
   }
   const description = current.length ? current.map((p) => `${productIcon(p.product_type)} **${p.name}** — ${currencyLabel(p)}\\n${p.description || 'بدون وصف'}`).join('\\n\\n') : 'لا توجد مشتريات متاحة حالياً. ستظهر المنتجات هنا عندما تضيفها الإدارة.';
-  return { embeds: [new EmbedBuilder().setColor(CYAN).setTitle('CREDITS SHOP').setDescription(description).setFooter({ text: `DOS COMMUNITY • صفحة ${safePage + 1}/${maxPage + 1}` })], components: rows };
+  return { embeds: [new EmbedBuilder().setColor(CYAN).setTitle('CREDITS SHOP').setDescription(description).setFooter({ text: `DOS COMMUNITY • صفحة ${safePage + 1}/${maxPage + 1}` })], attachments: [], components: rows };
 }
 function colorPickerPayload(guildId, purchaseId, page) {
   const totalPages = Math.ceil(COLOR_PALETTE.length / PAGE_SIZE);
