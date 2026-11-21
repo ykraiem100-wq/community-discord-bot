@@ -119,7 +119,7 @@ async function awardVoice(guildId,userId) {
     const guild = client.guilds.cache.get(guildId);
     let member = guild && guild.members.cache.get(userId);
     if (!member && guild) member = await guild.members.fetch(userId).catch(() => null);
-    await assignLevelRole(member,'voice',result.newVoiceLevel);
+    await assignLevelRole(member,'voice',result.newVoiceLevel);\n    const targetChannelId = database.getConfig(guildId,'level_channel_id','');\n    const targetChannel = targetChannelId ? await guild.channels.fetch(targetChannelId).catch(() => null) : guild.systemChannel;\n    if (targetChannel && targetChannel.isTextBased()) await targetChannel.send(`🎉 <@${userId}> وصل إلى المستوى الصوتي **${result.newVoiceLevel}**!`).catch(() => {});
   }
 }
 async function handleCommand(message) {
@@ -136,7 +136,7 @@ async function handleCommand(message) {
       const amount = Number(args[1]);
       if (!target || !Number.isSafeInteger(amount) || amount < 1 || amount > 1000000000) return message.reply('الاستخدام: .اضافة_عملات @عضو 100 أو .اضافة_xp @عضو 500');
       if (command === 'اضافة_عملات') database.addCoins(guildId,target.id,amount);
-      else database.addXp(guildId,target.id,'text',amount,{awardXp:true,awardCoins:false});
+      else {\n        const result = database.addXp(guildId,target.id,'text',amount,{awardXp:true,awardCoins:false});\n        if (result.newTextLevel > result.oldTextLevel) await assignLevelRole(target,'text',result.newTextLevel);\n      }
       database.logAdmin(guildId,userId,command,`target=${target.id};amount=${amount}`);
       return message.reply(command === 'اضافة_عملات' ? `تمت إضافة ${amount} DOS Coin إلى ${target}.` : `تمت إضافة ${amount} XP إلى ${target}.`);
     }
