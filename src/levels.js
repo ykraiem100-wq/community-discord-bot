@@ -1,9 +1,9 @@
 'use strict';
 
 const DEFAULT_CURVE = Object.freeze({
-  easyBase: 100, easyStep: 4,
-  mediumBase: 300, mediumStep: 10,
-  hardBase: 800, hardStep: 20
+  easyBase: 120, easyStep: 8,
+  mediumBase: 650, mediumStep: 24,
+  hardBase: 2200, hardStep: 120
 });
 
 function normalizeCurve(curve) {
