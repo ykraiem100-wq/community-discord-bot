@@ -11,7 +11,7 @@ const { deliverProduct, publishShop, refreshPublishedShop } = require('./shop');
 const FEATURES = [
   ['economy', 'العملات والمحفظة'], ['levels', 'المستويات وXP'], ['shop', 'المتجر'],
   ['top', 'TOP والمتصدرون'], ['main_panel', 'اللوحة الرئيسية'],
-  ['interaction_roles', 'رتب التفاعل'], ['events', 'الفعاليات'], ['welcome', 'رسالة الترحيب الحالية']
+  ['interaction_roles', 'رتب التفاعل'], ['events', 'الفعاليات']
 ];
 const CONTENT_KEYS = [
   ['main', 'اللوحة الرئيسية'], ['rules', 'قوانين السيرفر'], ['info', 'معلومات السيرفر'],
@@ -39,7 +39,7 @@ function homePayload() {
       { label: 'رتب المستويات', value: 'level_roles', description: 'ربط رتب بمستويات الكتابة والصوت', emoji: '🏅' },
       { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' }
     );
-  const embed = adminEmbed('👑 DOS CONTROL PANEL', 'لوحة الإدارة المركزية لسيرفر DOS COMMUNITY.\nادخل إلى أي قسم لتعديل إعداداته وحفظ التغييرات.\n\n**Silver × Cyan × Gold**');
+  const embed = adminEmbed('👑 DOS CONTROL PANEL', 'لوحة الإدارة المركزية لسيرفر DOS COMMUNITY.\nادخل إلى أي قسم لتعديل إعداداته وحفظ التغييرات.\n\n**Silver × Cyan**');
   embed.addFields(
     { name: '🛍️ المتجر', value: 'إضافة منتجات، الأسعار، الصور، تعطيل المنتجات، وإعداد الغرف.', inline: true },
     { name: '📝 الرسائل', value: 'تعديل القوانين والمعلومات ونصوص الأزرار.', inline: true },

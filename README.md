@@ -66,3 +66,12 @@ Discord message embeds display product cards vertically; the shop uses per-produ
 SQLite file: `DATA_DIR/community.sqlite`. The migration retains existing member records and coin balances, adds the new settings/shop/room/content tables, and preserves old orders. Daily/weekly/monthly event history only starts with the new release.
 
 Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. GitHub Actions checks syntax and runs tests on pushes and pull requests.
+
+## الصور المباشرة (PNG)
+
+- `/wallet` و`.محفظتي` يرسلان بطاقة المحفظة كملف PNG مباشر، مع فصل تقدّم الكتابة عن الصوت.
+- `/top` و`TOP` يرسلان صورة المتصدرين كملف PNG مباشر.
+- `/shop` و`.المتجر` يرسلان صورة منتجات بثلاثة أعمدة (حتى 9 منتجات في الصفحة) مع قائمة شراء وأزرار صفحات Discord منفصلة أسفل الصورة.
+- لوحة DOS الرئيسية وصفحات القوانين والمعلومات والنظام والفعاليات تُرسل كصور PNG مباشرة؛ وتبقى أزرار التفاعل الحقيقية كعناصر Discord أسفل صورة اللوحة.
+- تعتمد الرسومات على `@napi-rs/canvas` و`@fontsource/noto-sans-arabic`.
+- لا يجري تعديل مخطط بيانات الأعضاء أو حذف قاعدة البيانات بسبب إضافة الرسومات.

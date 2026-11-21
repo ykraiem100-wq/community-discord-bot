@@ -1,7 +1,8 @@
 'use strict';
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { levelProgress, difficultyFor } = require('./levels');
 const database = require('./database');
+const { renderWallet } = require('./render');
 function progressBar(percent) {
   const filled = Math.round(Math.min(100,Math.max(0,percent))/10);
   return '▰'.repeat(filled) + '▱'.repeat(10-filled);
@@ -25,4 +26,14 @@ function createWalletEmbed(member, user, guildId) {
       { name: '⏱️ وقت الفويس', value: '**' + hours + '** ساعة و **' + minutes + '** دقيقة', inline: true }
     ).setFooter({ text: 'DOS COMMUNITY • Silver × Cyan × Gold' }).setTimestamp();
 }
-module.exports = { createWalletEmbed };
+async function createWalletImage(member, user, guildId, guild, positions = {}) {
+  const curve = guildId ? database.curveForGuild(guildId) : undefined;
+  const text = levelProgress(Number(member.text_xp || 0), curve);
+  const voice = levelProgress(Number(member.voice_xp || 0), curve);
+  const image = await renderWallet({
+    user, profile: member, textProgress: text, voiceProgress: voice,
+    textPosition: positions.text || 0, voicePosition: positions.voice || 0, guild
+  });
+  return new AttachmentBuilder(image, { name: 'dos-wallet.png' });
+}
+module.exports = { createWalletEmbed, createWalletImage };

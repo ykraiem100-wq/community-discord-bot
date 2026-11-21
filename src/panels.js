@@ -1,9 +1,10 @@
 'use strict';
 const {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, MessageFlags
 } = require('discord.js');
 const database = require('./database');
+const { renderPanelPage } = require('./render');
 
 const CYAN = 0x36D9FF;
 const DEFAULT_CONTENT = {
@@ -41,11 +42,13 @@ function makeContentEmbed(guildId, key) {
   const item = content(guildId, key);
   return new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(item.body).setFooter({ text: 'DOS COMMUNITY • Silver × Cyan × Gold' });
 }
-function buildMainPanel(guildId) {
+async function buildMainPanel(guild, guildId) {
   const main = content(guildId, 'main');
-  const embed = new EmbedBuilder().setColor(CYAN).setTitle(main.title).setDescription(main.body)
-    .addFields({ name: 'اختر القسم', value: '📜 قوانين السيرفر　　ℹ️ معلومات السيرفر\n🔔 رتب التفاعل　　⚙️ نظام السيرفر\n🎮 الفعاليات' })
-    .setFooter({ text: 'DOS COMMUNITY • Silver × Cyan × Gold' });
+  const image = await renderPanelPage({
+    guild, title: main.title, body: main.body,
+    sections: ['قوانين السيرفر', 'معلومات السيرفر', 'رتب التفاعل', 'نظام السيرفر', 'الفعاليات'],
+    subtitle: 'DOS COMMUNITY • MAIN PANEL'
+  });
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('public:rules').setLabel('قوانين السيرفر').setEmoji('📜').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('public:info').setLabel('معلومات السيرفر').setEmoji('ℹ️').setStyle(ButtonStyle.Secondary),
@@ -55,7 +58,7 @@ function buildMainPanel(guildId) {
     new ButtonBuilder().setCustomId('public:system').setLabel('نظام السيرفر').setEmoji('⚙️').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('public:events').setLabel('الفعاليات').setEmoji('🎮').setStyle(ButtonStyle.Secondary)
   );
-  return { embeds: [embed], components: [row1, row2] };
+  return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
 }
 async function publishMainPanel(guild, channel) {
   if (!channel || !channel.isTextBased() || !channel.send) throw new Error('اختر قناة كتابية صالحة.');
@@ -65,7 +68,7 @@ async function publishMainPanel(guild, channel) {
     const oldChannel = await guild.channels.fetch(settings.panel_channel_id).catch(() => null);
     if (oldChannel && oldChannel.isTextBased()) message = await oldChannel.messages.fetch(settings.panel_message_id).catch(() => null);
   }
-  const payload = buildMainPanel(guild.id);
+  const payload = await buildMainPanel(guild, guild.id);
   if (message) {
     await message.edit(payload);
     if (channel.id !== message.channelId) {
@@ -88,7 +91,9 @@ async function handlePublicPanelInteraction(interaction) {
       if (action === 'events' && !database.featureEnabled(interaction.guildId, 'events')) {
       return interaction.reply({ content: 'قسم الفعاليات متوقف حالياً.', flags: MessageFlags.Ephemeral });
     }
-    return interaction.reply({ embeds: [makeContentEmbed(interaction.guildId, action)], flags: MessageFlags.Ephemeral });
+    const item = content(interaction.guildId, action);
+    const image = await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • ' + action.toUpperCase() });
+    return interaction.reply({ files: [new AttachmentBuilder(image, { name: 'dos-' + action + '.png' })], flags: MessageFlags.Ephemeral });
   }
   if (scope === 'public' && action === 'notifications') {
     if (!database.featureEnabled(interaction.guildId, 'interaction_roles')) {
@@ -100,7 +105,9 @@ async function handlePublicPanelInteraction(interaction) {
     const current = member.roles.cache;
     const menu = new StringSelectMenuBuilder().setCustomId('notify:select').setPlaceholder('اختر رتب الإشعارات').setMinValues(0).setMaxValues(roles.length)
       .addOptions(roles.map((row) => ({ label: row.role_name.slice(0, 100), value: row.role_id, default: current.has(row.role_id) })));
-    return interaction.reply({ content: makeContentEmbed(interaction.guildId, 'notifications').data.description, components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
+    const item = content(interaction.guildId, 'notifications');
+    const image = await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • NOTIFICATIONS' });
+    return interaction.reply({ files: [new AttachmentBuilder(image, { name: 'dos-notifications.png' })], components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
   }
   if (scope === 'notify' && action === 'select' && interaction.isStringSelectMenu()) {
     const managed = database.interactionRoles(interaction.guildId).map((row) => row.role_id);
