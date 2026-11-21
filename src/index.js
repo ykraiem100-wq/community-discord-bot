@@ -190,7 +190,7 @@ async function handleCommand(message) {
   }
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log('[DISCORD] Logged in as ' + client.user.tag);
   console.log('[DISCORD] Connected to ' + client.guilds.cache.size + ' server(s)');
   // Do not award offline time after redeploy; start fresh sessions for connected members.
