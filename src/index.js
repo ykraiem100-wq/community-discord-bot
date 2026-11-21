@@ -196,7 +196,7 @@ async function handleSlashCommand(interaction) {
   const guildId = interaction.guildId;
   if (interaction.commandName === 'admin-panel') {
     if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
-    return interaction.reply({ ...homePayload(),flags:MessageFlags.Ephemeral });
+    return interaction.reply({ ...await homePayload(interaction.guildId),flags:MessageFlags.Ephemeral });
   }
   if (interaction.commandName === 'wallet') {
     if (!database.featureEnabled(guildId,'economy')) return interaction.reply({content:'المحفظة متوقفة مؤقتاً.',flags:MessageFlags.Ephemeral});
