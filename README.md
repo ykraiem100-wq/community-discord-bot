@@ -1,48 +1,62 @@
-# Community Discord Bot
+# DOS Community Discord Bot
 
-Arabic Discord bot built with Node.js 20 and discord.js v14.
-
-## Economy
-- Each non-command text message: 7 XP.
-- Each complete minute in a voice channel: 9 XP.
-- Text and voice XP/levels are tracked separately.
-- Every 250 lifetime XP earned grants 1 coin. Coins are stored separately from XP and spending never reduces XP.
-- Voice XP is awarded only for complete elapsed minutes. Bot restarts preserve session timestamps.
-
-## Commands
-- `.محفظتي` — wallet card.
-- `.محفظتي @member` — another member's public wallet.
-- `.متصدرين كتابي`, `.متصدرين صوتي`, `.متصدرين عملات`.
-- `.المتجر` — show shop items.
-- `.شراء رقم_المنتج` — buy an item (staff approval required).
-- `.إحصائيات` — server economy statistics.
-- Admin: `.تعيين_قناة متجر #channel`, `.تعيين_قناة ترحيب #channel`.
-- Admin: `.رتبة_مستوى كتابة 10 @role` or `.رتبة_مستوى صوت 10 @role`.
-- Admin: `.طلبات`, `.قبول ID`, `.رفض ID`.
+Node.js 20 + Discord.js v14 bot, structured for Nowhost Git deployment.
 
 ## Nowhost deployment
 
-This repository is prepared for Nowhost's Git-based Node.js bot runtime.
+Nowhost detects Node.js projects from the root package.json, installs dependencies and starts the start script. This repository intentionally has no Render manifest, Procfile, Dockerfile or made-up Nowhost YAML file.
 
-- Keep this repository's `package.json` in the repository root.
-- Connect the GitHub repository and deploy the `main` branch.
-- Nowhost detects Node.js from `package.json`; this project targets Node.js 20.x.
-- The start command is `npm start`, which runs `node src/index.js`.
-- Nowhost installs the dependencies declared in `package.json`; no Nowhost-specific YAML, Procfile, or Dockerfile is required for this Node.js bot.
-- Add `DISCORD_TOKEN` as a secret and `DISCORD_CLIENT_ID` as an environment variable in the Nowhost panel.
-- Optional variables: `BOT_PREFIX` (defaults to `.`) and `DATA_DIR` (defaults to `./data`).
-- This version uses prefix commands, not slash commands; it does not require `GUILD_ID` or `OWNER_ID`.
-- The code currently stores economy data in SQLite at `DATA_DIR/community.sqlite`. Use persistent storage if your selected Nowhost plan exposes it.
+| Setting | Value |
+|---|---|
+| Repository root | / (the folder containing package.json) |
+| Branch | main |
+| Runtime | Node.js 20.x |
+| Install | Automatic from package.json |
+| Start command | npm start |
+| Entry point | src/index.js |
 
-**Plan note:** Nowhost currently lists deployment of a user's own GitHub repository under its paid bot plans. The Free plan is for the visual builder and templates.
+Add these variables in Nowhost → your bot → Environment:
 
-After deploying, check the runtime logs for `[Discord] Logged in as ...`. If that line does not appear, use the build/runtime error shown by Nowhost to diagnose the failure.
+- DISCORD_TOKEN — required bot token; store it as a secret.
+- DISCORD_CLIENT_ID — required by Nowhost for application identity and invite link.
+- OWNER_ID — optional Discord user ID that can run admin commands.
+- BOT_PREFIX — optional, defaults to .
+- DATA_DIR — optional, defaults to ./data; use persistent storage if available.
+- TZ — optional timezone, e.g. Asia/Amman.
 
-## Run
-Use Node.js 20.x and the repository root (the folder containing `package.json`). Nowhost detects Node from the package manifest, installs dependencies from `package.json`, and starts the process with `npm start` (`node src/index.js`). Do not set a different start command or a Python runtime.\n\n### Nowhost environment variables\n- `DISCORD_TOKEN` — required bot token; store as a secret.\n- `DISCORD_CLIENT_ID` — recommended by Nowhost for its bot invite link. It is not required by this prefix-command code to log in.\n- `BOT_PREFIX` — optional, defaults to `.`.\n- `DATA_DIR` — optional, defaults to `./data`; point it to a persistent data directory if your Nowhost plan exposes one.\n\nNo `GUILD_ID`, `OWNER_ID`, or slash-command registration is needed by this version. The bot currently uses prefix commands, not slash commands. Run `npm run check` to syntax-check the JavaScript files.
+Do not add quotation marks around values. Never commit a real token or .env file.
 
-Keep the SQLite database directory persistent on your host and do not commit tokens or database files.
+## Discord Developer Portal
 
-Shop entries that represent Discord platform perks are submitted as staff-reviewed purchase requests; the bot cannot independently add platform entitlements such as animated assets or premium slots.
+Enable Message Content Intent and Server Members Intent under Application → Bot → Privileged Gateway Intents. The bot also needs permissions to view/send messages, embed links, view voice channels, and manage roles if you use level-role rewards. Place the bot's highest role above the reward roles.
 
-> Security note: Node.js 20 reached end-of-life on April 30, 2026. Use it only where required by the host; upgrade to a supported LTS runtime when possible.
+## Commands
+
+- .مساعدة
+- .محفظتي and .محفظتي @member
+- .متصدرين كتابي, .متصدرين صوتي, .متصدرين عملات
+- .المتجر, .شراء 1
+- .إحصائيات
+- Admin: .تعيين_قناة متجر #channel, .تعيين_قناة ترحيب #channel
+- Admin: .رتبة_مستوى كتابة 10 @channel, .رتبة_مستوى صوت 10 @role
+- Admin: .طلبات, .قبول ID, .رفض ID
+
+## Economy
+
+- Each non-command text message: 7 XP.
+- Each eligible voice minute: 9 XP.
+- Text and voice XP levels are separate.
+- Every 250 earned XP grants 1 coin; spending coins does not reduce XP.
+- SQLite stores XP, balances, messages, voice totals, settings, level roles and shop orders.
+
+Database file: DATA_DIR/community.sqlite. Keep this directory persistent if your hosting plan provides persistent storage. The migration adds missing fields to the existing database without deleting members or changing their coin balances.
+
+## Checks
+
+Run locally or in CI: npm install, npm run check, npm test, npm start.
+
+The GitHub Actions workflow runs syntax checks and tests on pushes to main.
+
+After a successful Nowhost deployment, Runtime Logs should include: [DISCORD] Logged in as ...
+
+Node.js 20 is used because the Nowhost Discord.js deployment guide specifies Node 20. Node.js 20 is end-of-life upstream; upgrade only when Nowhost supports a newer runtime for this bot.
