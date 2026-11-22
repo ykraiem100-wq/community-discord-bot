@@ -29,6 +29,12 @@ try {
   assert.equal(db.refundProductPurchase(guild,purchase.id),true);
   assert.equal(db.ensureMember(guild,user).coins,1);
 
+  const colorExpiry = Math.floor(Date.now() / 1000) + 30 * 86400;
+  db.setCustomColorRole(guild, user, 'color-role-id', colorExpiry);
+  assert.equal(db.getCustomColorRole(guild, user), 'color-role-id');
+  assert.equal(db.expiredCustomColorRoles(colorExpiry - 1).length, 0);
+  assert.equal(db.expiredCustomColorRoles(colorExpiry).length, 1);
+
   db.setInteractionRoles(guild,[{id:'role-a',name:'فعاليات'},{id:'role-b',name:'مسابقات'}]);
   assert.equal(db.interactionRoles(guild).length,2);
   db.setSetting(guild,'shop_category_id','category-id');
@@ -42,12 +48,18 @@ try {
   const expiry = now + 10*86400;
   const roomId = db.createRoomRecord(guild,user,'channel-test','voice',roomProduct,expiry);
   assert.equal(db.getRoom(guild,roomId,user).expires_at,expiry);
+  assert.equal(db.getRoomByChannel(guild, 'channel-test').id, roomId);
+  assert.equal(db.setRoomPanelMessage(roomId, 'panel-message-id'), true);
+  assert.equal(db.getRoom(guild, roomId, user).panel_message_id, 'panel-message-id');
+  assert.equal(db.setRoomLocked(roomId, true), true);
+  assert.equal(db.getRoom(guild, roomId, user).voice_locked, 1);
   const renewal = db.renewRoom(guild,user,roomId,now);
   assert.equal(renewal.error,undefined);
   assert.equal(renewal.expires_at,expiry+30*86400);
   assert.equal(db.getRoom(guild,roomId,user).expires_at,expiry+30*86400);
   assert.equal(db.extendRoom(roomId,30),true);
   assert.equal(db.closeRoom(roomId),true);
+  assert.equal(db.deleteCustomColorRole(guild, user), true);
   assert.equal(db.activeRooms(guild).some((room)=>room.id===roomId),false);
 
   db.setConfig(guild,'main_panel_buttons',JSON.stringify(['rules','roles','arena']),'admin');
