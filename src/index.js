@@ -236,7 +236,7 @@ async function handleCommand(message) {
       if (!database.featureEnabled(guildId,'shop')) return message.reply('المتجر متوقف حالياً.');
       const settings = database.settings(guildId);
       if (settings.shop_channel_id && message.channel.id !== settings.shop_channel_id) return message.reply({ content:`المتجر متاح في ${message.guild.channels.cache.get(settings.shop_channel_id) || 'القناة المخصصة'} فقط.` });
-      return message.reply(await shopPayload(guildId,0));
+      return message.reply(await shopPayload(message.guild,0));
     }
     if (command === 'طلبات') {
       if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
@@ -344,7 +344,7 @@ async function handleSlashCommand(interaction) {
     if (!database.featureEnabled(guildId,'shop')) return interaction.reply({content:'المتجر متوقف حالياً.',flags:MessageFlags.Ephemeral});
     const settings = database.settings(guildId);
     if (settings.shop_channel_id && interaction.channelId !== settings.shop_channel_id) return interaction.reply({content:`المتجر متاح في <#${settings.shop_channel_id}> فقط.`,flags:MessageFlags.Ephemeral});
-    return interaction.reply(await shopPayload(guildId,0));
+    return interaction.reply(await shopPayload(interaction.guild,0));
   }
   if (interaction.commandName === 'color-selection') {
     const orderId = interaction.options.getInteger('order_id');

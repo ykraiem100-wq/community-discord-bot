@@ -339,21 +339,29 @@ async function renderMainPanel({ guild = null, title = '', body = '', signature 
   return canvas.toBuffer('image/png');
 }
 
-// Wide shop banner with the custom DOS mascot. Products and prices remain database-driven.
-async function renderShopHeader() {
-  const source = await loadSafeImage(path.join(TEMPLATE_DIR, 'shop-mascot.png'));
+// Wide shop banner. The medallion is filled with the current Discord server icon at runtime.
+// This keeps the shop branded to the actual guild instead of using a generic mascot.
+async function renderShopHeader(guild = null) {
+  const source = await loadSafeImage(path.join(TEMPLATE_DIR, 'shop-crest-bg.png'));
   const canvas = createCanvas(1200, 560);
   const ctx = canvas.getContext('2d');
   const bg = ctx.createLinearGradient(0, 0, 1200, 560);
   bg.addColorStop(0, '#282A2F'); bg.addColorStop(1, '#383A40');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 560);
-  if (source) drawImageContain(ctx, source, 0, 80, 1200, 400, 18);
-  patch(ctx, 10, 12, 8, 536, '#E4B94F', 5);
-  patch(ctx, 690, 110, 475, 330, 'rgba(38,40,46,0.25)', 24, 'rgba(255,255,255,0.05)');
-  drawText(ctx, 'CREDITS SHOP', 930, 235, 58, '#FFF8E7', 1000, 'center', 440);
-  drawText(ctx, 'DOS COMMUNITY', 930, 300, 25, '#E7C26D', 850, 'center', 420);
-  ctx.save(); ctx.strokeStyle = '#CDA64B'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(770, 342); ctx.lineTo(1090, 342); ctx.stroke(); ctx.restore();
-  drawText(ctx, 'COLORS  •  CUSTOM ROLES  •  ITEMS', 930, 385, 18, '#E5E6E9', 800, 'center', 420);
+  if (source) drawImageContain(ctx, source, 0, 0, 735, 560, 18);
+
+  const iconUrl = guild && typeof guild.iconURL === 'function'
+    ? guild.iconURL({ extension: 'png', size: 512 }) : null;
+  const serverIcon = await loadSafeImage(iconUrl);
+  // The image template has an empty circular crest here; the real server icon is clipped into it.
+  drawCircleImage(ctx, serverIcon, 122, 93, 220, '#E4B94F', 4);
+
+  patch(ctx, 752, 98, 430, 360, 'rgba(38,40,46,0.32)', 24, 'rgba(255,255,255,0.06)');
+  drawText(ctx, 'CREDITS SHOP', 967, 205, 54, '#FFF8E7', 1000, 'center', 405);
+  const serverName = guild && guild.name ? guild.name : 'DOS COMMUNITY';
+  drawText(ctx, serverName, 967, 282, 27, '#E7C26D', 850, 'center', 390);
+  ctx.save(); ctx.strokeStyle = '#CDA64B'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(810, 330); ctx.lineTo(1124, 330); ctx.stroke(); ctx.restore();
+  drawText(ctx, 'COLORS  •  CUSTOM ROLES  •  ITEMS', 967, 382, 17, '#E5E6E9', 800, 'center', 395);
   return canvas.toBuffer('image/png');
 }
 

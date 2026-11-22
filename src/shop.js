@@ -23,7 +23,9 @@ function currencyLabel(product) {
 function productIcon(type) {
   return ({ color: '🎨', text_room: '📝', voice_room: '🔊', role: '👑', digital: '📦', manual: '🛠️' })[type] || '🛍️';
 }
-async function shopPayload(guildId, page) {
+async function shopPayload(guildOrId, page) {
+  const guild = guildOrId && typeof guildOrId === 'object' ? guildOrId : null;
+  const guildId = guild ? guild.id : guildOrId;
   if (!database.featureEnabled(guildId, 'shop')) {
     return { content: '🛍️ DOS SHOP مغلق مؤقتاً. تابع إعلانات DOS COMMUNITY لمعرفة موعد عودته.', components: [] };
   }
@@ -32,7 +34,7 @@ async function shopPayload(guildId, page) {
   const maxPage = Math.max(0, Math.ceil(products.length / PAGE_SIZE) - 1);
   const safePage = Math.min(Math.max(0, Number(page) || 0), maxPage);
   const current = products.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-  const image = await renderShopHeader();
+  const image = await renderShopHeader(guild);
   const rows = [];
   if (current.length) {
     const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('Buy... اختر المنتج الذي تريد شراءه').setMinValues(1).setMaxValues(1)
@@ -114,7 +116,7 @@ async function publishShop(guild, channel) {
     const oldChannel = await guild.channels.fetch(settings.shop_channel_id).catch(() => null);
     if (oldChannel && oldChannel.isTextBased()) message = await oldChannel.messages.fetch(settings.shop_message_id).catch(() => null);
   }
-  const payload = await shopPayload(guild.id,0);
+  const payload = await shopPayload(guild,0);
   if (message && message.channelId === channel.id) {
     await message.edit(payload);
     return message;
@@ -169,7 +171,7 @@ async function deliverProduct(client, guildId, purchaseId, actorId) {
 async function handleShopInteraction(interaction, client) {
   const parts = interaction.customId.split(':');
   if (parts[0] === 'shop' && parts[1] === 'page') {
-    return interaction.update(await shopPayload(interaction.guildId, Number(parts[2]) || 0));
+    return interaction.update(await shopPayload(interaction.guild, Number(parts[2]) || 0));
   }
   if (parts[0] === 'shop' && parts[1] === 'buy' && interaction.isStringSelectMenu()) {
     if (!database.featureEnabled(interaction.guildId, 'shop')) return interaction.reply({ content: 'المتجر متوقف حالياً.', flags: MessageFlags.Ephemeral });
