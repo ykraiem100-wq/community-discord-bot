@@ -43,3 +43,4 @@ DOS COMMUNITY — رفع الحزمة المحدّثة على Nowhost
 الفحوصات:
 - فحص صياغة JavaScript: npm run check
 - الاختبارات: npm test (بعد اكتمال npm install)
+\n\nNEW FEATURES IN THIS UPDATE\n- Server boosters receive the configured XP multiplier (default x1.5) for message and voice XP. Optionally set a booster role; a member must be actively boosting and hold that role.\n- Configure the booster role and multiplier from /admin-panel -> مكافأة بوست السيرفر.\n- A cyan DOS member welcome card is sent when a member joins. Configure its channel, message template, preview and enable/disable state from /admin-panel -> بطاقة ترحيب بصورة.\n- Welcome template placeholders: {user}, {username}, {server}, {memberCount} (also {count}/{members}).\n- Wallet profile photos are now clipped to a true circle.\n- No existing member balances or XP are reset by these changes.\n
