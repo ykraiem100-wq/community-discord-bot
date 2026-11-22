@@ -1,7 +1,7 @@
-DOS COMMUNITY — رفع الحزمة المحدّثة على Nowhost
+DOS COMMUNITY — رفع حزمة DOS COMMUNITY المحدّثة على Nowhost
 ================================================
 
-1) فك ضغط ملف community-discord-bot-admin-controls.zip.
+1) فك ضغط ملف community-discord-bot-events-tasks-update.zip.
 2) افتح مجلد community-discord-bot-main الموجود داخل الملف المضغوط.
 3) ارفع محتويات هذا المجلد إلى جذر مشروعك في Nowhost؛ يجب أن يكون package.json بجانب مجلدي src و assets.
 4) اختر Node.js 20.x.
@@ -44,3 +44,12 @@ DOS COMMUNITY — رفع الحزمة المحدّثة على Nowhost
 - فحص صياغة JavaScript: npm run check
 - الاختبارات: npm test (بعد اكتمال npm install)
 \n\nNEW FEATURES IN THIS UPDATE\n- Server boosters receive the configured XP multiplier (default x1.5) for message and voice XP. Optionally set a booster role; a member must be actively boosting and hold that role.\n- Configure the booster role and multiplier from /admin-panel -> مكافأة بوست السيرفر.\n- A cyan DOS member welcome card is sent when a member joins. Configure its channel, message template, preview and enable/disable state from /admin-panel -> بطاقة ترحيب بصورة.\n- Welcome template placeholders: {user}, {username}, {server}, {memberCount} (also {count}/{members}).\n- Wallet profile photos are now clipped to a true circle.\n- No existing member balances or XP are reset by these changes.\n
+
+الأسئلة والمهام ومكافآت الدعوات:
+- من /admin-panel → سؤال اليوم العشوائي: فعّل النظام، اختر قناة، وعدّل جائزة DOS Coin. يوجد بنك 110 أسئلة عربية، وينشر سؤال واحد يومياً بين 10:00 و22:59 حسب توقيت Asia/Amman.
+- من /admin-panel → المهام اليومية والأسبوعية: أنشئ مهمة يومية أو أسبوعية. اكتب xp:5000 لتجميع XP، أو messages:3 لاحتساب 3 رسائل في قناة تختارها من تفاصيل المهمة، أو manual:1 لمهمة تحتاج إثباتاً وموافقة الإدارة. اختر coins:100 أو xp:500 للجائزة. حدّد عدد الفائزين من تفاصيل المهمة. الأعضاء يستخدمون .مهامي.
+- المهام اليدوية مثل حضور فيلم تحتاج إرسال إثبات ثم مراجعة الإدارة؛ لا يستطيع البوت التحقق تلقائياً من مشاهدة محتوى خارج Discord.
+- من /admin-panel → مكافآت الدعوات: اكتب coins:10 أو xp:250 أو 0 لإيقاف المكافأة. تُصرف مرة واحدة عند نجاح تعرّف البوت على رابط الدعوة وتسجيل العضو. يحتاج البوت إلى Manage Server.
+- اختصار المحفظة الجديد: .r وهو بديل عن .محفظتي.
+- يمكن تعديل وصف المهمة وهدفها ودوريتها ونوع الجائزة ومقدارها من زر «تعديل المهمة والجائزة» داخل تفاصيل المهمة؛ وعدد الفائزين من زر مستقل.
+- إذا توقف البوت أثناء نشر سؤال اليوم، يحاول إعادة نشر السؤال نفسه عند عودة التشغيل بدلاً من فقدانه.

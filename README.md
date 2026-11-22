@@ -118,3 +118,13 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 قالب النص الافتراضي: `🌟 First message from {user}`. المتغيرات المتاحة: `{user}` لمنشن العضو الجديد، `{username}` لاسمه، و`{server}` لاسم السيرفر. زر الإيموجي بجانب الرسالة يضيف تفاعل 👋 إلى رسالة الترحيب عند الضغط عليه.
 
 تأكد من تفعيل **Server Members Intent** في Discord Developer Portal ومنح البوت صلاحيات عرض القناة وإرسال الرسائل وإضافة التفاعلات.
+
+
+## Daily questions, missions, and invite rewards
+- Daily questions use a built-in bank of 110 Arabic general-knowledge questions. Enable the system, choose a text channel, and set the DOS Coin prize in `/admin-panel` → `سؤال اليوم العشوائي`. The bot schedules one question per day at a randomized time between 10:00 and 22:59 in the configured process timezone (default `Asia/Amman`). The first matching correct answer receives the prize. If the bot restarts during publication, it retries the stored question instead of consuming a second question.
+- Daily and weekly missions are managed from `/admin-panel` → `المهام اليومية والأسبوعية`. You can edit a task title, description, period, target, reward type and reward amount later from its `تعديل المهمة والجائزة` button. Supported progress types: XP earned, messages in one selected text channel, or manual proof submissions. Manual tasks (for example, watching a film) require staff review; Discord cannot verify off-platform viewing. The configured first N winners receive the selected DOS Coin or XP prize. Members view progress with `.مهامي`.
+- Invite prizes are managed from `/admin-panel` → `مكافآت الدعوات`. Set `coins:10`, `xp:250`, or `0` to disable. A prize is granted only once per joined account when the bot can identify and record the invite link used. Invite tracking requires the bot's `Manage Server` permission; vanity/unknown invite sources cannot be attributed reliably.
+- XP missions progress from message XP, voice XP, manual admin XP awards, and XP invite rewards. The booster multiplier applies to message and voice XP; the configured mission reward amount itself is not multiplied.
+- The member welcome artwork places the avatar inside the left circular frame and renders the editable `Welcome To DOS` branding in the central panel. The wallet avatar is clipped to the circular portrait window. `.r` is an alias for `.محفظتي`.
+
+Static tests that do not require installed native dependencies can be run with `npm run test:static`. Full DB and image tests run with `npm test` after `npm install`.
