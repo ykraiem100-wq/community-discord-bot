@@ -1,38 +1,60 @@
 'use strict';
 
+// XP required to gain levels 1–6. From level 7 onward the requirement grows
+// by a larger base amount plus an additional increase at every level.
 const DEFAULT_CURVE = Object.freeze({
-  easyBase: 100, easyStep: 4,
-  mediumBase: 300, mediumStep: 10,
-  hardBase: 800, hardStep: 20
+  firstLevels: Object.freeze([100, 150, 250, 400, 500, 600]),
+  level7Base: 750,
+  level7Increment: 150,
+  growthStep: 5
 });
 
 function normalizeCurve(curve) {
   const source = curve || {};
-  const out = {};
-  for (const key of Object.keys(DEFAULT_CURVE)) {
-    const value = Number(source[key]);
-    out[key] = Number.isSafeInteger(value) && value >= 1 ? value : DEFAULT_CURVE[key];
+  const raw = Array.isArray(source.firstLevels) ? source.firstLevels : DEFAULT_CURVE.firstLevels;
+  const firstLevels = DEFAULT_CURVE.firstLevels.map((fallback, index) => {
+    const value = Number(raw[index]);
+    return Number.isSafeInteger(value) && value >= 1 ? value : fallback;
+  });
+  // Do not allow an invalid custom curve to make later levels easier.
+  for (let i = 1; i < firstLevels.length; i += 1) {
+    if (firstLevels[i] <= firstLevels[i - 1]) firstLevels[i] = Math.max(fallbackIncrement(firstLevels, i), firstLevels[i - 1] + 1);
   }
-  return out;
+  const read = (key) => {
+    const value = Number(source[key]);
+    return Number.isSafeInteger(value) && value >= 0 ? value : DEFAULT_CURVE[key];
+  };
+  const level7Base = read('level7Base');
+  const level7Increment = Math.max(1, read('level7Increment'));
+  const growthStep = read('growthStep');
+  return { firstLevels, level7Base: Math.max(level7Base, firstLevels[5] + 1), level7Increment, growthStep };
 }
+function fallbackIncrement(values, index) {
+  return DEFAULT_CURVE.firstLevels[index];
+}
+
 function xpToNextLevel(level, curve) {
   const current = Math.max(0, Math.floor(Number(level) || 0));
   const c = normalizeCurve(curve);
-  if (current < 50) return c.easyBase + current * c.easyStep;
-  if (current < 100) return c.mediumBase + (current - 50) * c.mediumStep;
-  return c.hardBase + (current - 100) * c.hardStep;
+  if (current < c.firstLevels.length) return c.firstLevels[current];
+  const k = current - c.firstLevels.length;
+  return c.level7Base + c.level7Increment * k + c.growthStep * k * (k - 1) / 2;
 }
+
 function xpToReachLevel(level, curve) {
   const target = Math.max(0, Math.floor(Number(level) || 0));
   const c = normalizeCurve(curve);
-  const easy = Math.min(target, 50);
-  const medium = Math.max(0, Math.min(target - 50, 50));
-  const hard = Math.max(0, target - 100);
-  const easyTotal = c.easyBase * easy + c.easyStep * easy * (easy - 1) / 2;
-  const mediumTotal = c.mediumBase * medium + c.mediumStep * medium * (medium - 1) / 2;
-  const hardTotal = c.hardBase * hard + c.hardStep * hard * (hard - 1) / 2;
-  return easyTotal + mediumTotal + hardTotal;
+  const firstCount = Math.min(target, c.firstLevels.length);
+  let total = c.firstLevels.slice(0, firstCount).reduce((sum, value) => sum + value, 0);
+  const remaining = Math.max(0, target - c.firstLevels.length);
+  if (remaining > 0) {
+    total += remaining * c.level7Base;
+    total += c.level7Increment * remaining * (remaining - 1) / 2;
+    total += c.growthStep * remaining * (remaining - 1) * (remaining - 2) / 6;
+  }
+  return Math.floor(total);
 }
+
 function levelProgress(totalXp, curve) {
   const xp = Math.max(0, Math.floor(Number(totalXp) || 0));
   let low = 0;
@@ -51,8 +73,9 @@ function levelProgress(totalXp, curve) {
 function levelFor(totalXp, curve) { return levelProgress(totalXp, curve).level; }
 function difficultyFor(level) {
   const value = Math.max(0, Math.floor(Number(level) || 0));
-  if (value <= 50) return 'سهل ← متوسط';
-  if (value <= 100) return 'متوسط ← صعب';
-  return 'صعب';
+  if (value <= 6) return 'بداية';
+  if (value <= 100) return 'صعب ومتزايد';
+  return 'نخبوي';
 }
+
 module.exports = { DEFAULT_CURVE, normalizeCurve, xpToNextLevel, xpToReachLevel, levelProgress, levelFor, difficultyFor };

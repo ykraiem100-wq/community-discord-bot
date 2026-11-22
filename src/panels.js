@@ -97,7 +97,11 @@ async function handlePublicPanelInteraction(interaction) {
           xpPerCoin: database.getConfig(interaction.guildId, 'xp_per_coin', '250')
         })
       : await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • ' + action.toUpperCase() });
-    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(String(item.body || '').slice(0, 4096));
+    const systemCurve = action === 'system' ? database.curveForGuild(interaction.guildId) : null;
+    const systemDetails = systemCurve
+      ? `\n\n**متطلبات المستويات:** ${systemCurve.firstLevels.join('، ')} XP لأول 6 مستويات. يبدأ المستوى 7 بـ ${systemCurve.level7Base} XP، ثم تزداد المتطلبات تدريجياً بمقدار ${systemCurve.level7Increment} XP أساسياً مع زيادة إضافية قدرها ${systemCurve.growthStep} XP في كل مستوى. يستمر التصاعد بعد المستوى 100.`
+      : '';
+    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription((String(item.body || '') + systemDetails).slice(0, 4096));
     return interaction.reply({
       embeds: [contentEmbed],
       files: [new AttachmentBuilder(image, { name: 'dos-' + action + '.png' })],

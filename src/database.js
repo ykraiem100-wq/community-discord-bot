@@ -60,13 +60,18 @@ addColumn('guild_settings', 'panel_channel_id', 'TEXT');
 addColumn('guild_settings', 'panel_message_id', 'TEXT');
 addColumn('guild_settings', 'shop_category_id', 'TEXT');
 addColumn('guild_settings', 'shop_message_id', 'TEXT');
+addColumn('guild_settings', 'level_up_channel_id', 'TEXT');
 addColumn('shop_products', 'cash_currency', "TEXT NOT NULL DEFAULT 'JOD'");
 const memberColumns = columns('members');
 if (memberColumns.has('total_xp') && memberColumns.has('text_xp') && memberColumns.has('voice_xp')) {
-  db.exec(
-    'UPDATE members SET text_xp = total_xp WHERE text_xp = 0 AND voice_xp = 0 AND total_xp > 0;' +
-    'UPDATE members SET coin_remainder = total_xp % 250 WHERE coin_remainder = 0 AND total_xp > 0;'
-  );
+  db.exec('UPDATE members SET text_xp = total_xp WHERE text_xp = 0 AND voice_xp = 0 AND total_xp > 0');
+  // Preserve the exact legacy XP carry-over when it exists. Derive it only for
+  // older schemas that never stored a separate remainder, to avoid re-awarding coins.
+  if (memberColumns.has('xp_progress')) {
+    db.exec('UPDATE members SET coin_remainder = xp_progress WHERE coin_remainder = 0 AND xp_progress > 0');
+  } else {
+    db.exec('UPDATE members SET coin_remainder = total_xp % 250 WHERE coin_remainder = 0 AND total_xp > 0');
+  }
 }
 if (memberColumns.has('voice_minutes')) {
   db.exec('UPDATE members SET voice_seconds = voice_minutes * 60 WHERE voice_seconds = 0 AND voice_minutes > 0');
@@ -93,6 +98,7 @@ const q = {
   setPanel: db.prepare('INSERT INTO guild_settings(guild_id,panel_channel_id,panel_message_id) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET panel_channel_id=excluded.panel_channel_id,panel_message_id=excluded.panel_message_id'),
   setShopMessage: db.prepare('INSERT INTO guild_settings(guild_id,shop_message_id) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET shop_message_id=excluded.shop_message_id'),
   setCategory: db.prepare('INSERT INTO guild_settings(guild_id,shop_category_id) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET shop_category_id=excluded.shop_category_id'),
+  setLevelUpChannel: db.prepare('INSERT INTO guild_settings(guild_id,level_up_channel_id) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET level_up_channel_id=excluded.level_up_channel_id'),
   setRole: db.prepare('INSERT INTO level_roles(guild_id,kind,level,role_id) VALUES(?,?,?,?) ON CONFLICT(guild_id,kind,level) DO UPDATE SET role_id=excluded.role_id'),
   roles: db.prepare('SELECT * FROM level_roles WHERE guild_id=? AND kind=? ORDER BY level ASC'),
   orderGet: db.prepare('SELECT * FROM shop_orders WHERE guild_id=? AND id=?'),
@@ -171,10 +177,27 @@ function addXp(guildId, userId, kind, amount, options) {
   if (!Number.isSafeInteger(amount) || amount < 1) throw new TypeError('Invalid XP amount');
   return addXpTransaction(guildId, userId, kind, amount, options.seconds || 0, Boolean(options.message), options.awardXp !== false, options.awardCoins !== false, options.xpPerCoin || 250);
 }
+function addCoins(guildId, userId, amount) {
+  if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1000000000) throw new TypeError('Invalid coin amount');
+  ensureMember(guildId, userId);
+  db.prepare('UPDATE members SET coins=coins+?,updated_at=unixepoch() WHERE guild_id=? AND user_id=?').run(amount, guildId, userId);
+  db.prepare("INSERT INTO xp_events(guild_id,user_id,event_type,amount) VALUES(?,?,'coins',?)").run(guildId, userId, amount);
+  return q.get.get(guildId, userId);
+}
+const resetMemberTransaction = db.transaction((guildId, userId, nowMs) => {
+  ensureMember(guildId, userId);
+  db.prepare('UPDATE members SET text_xp=0,voice_xp=0,total_xp=0,coin_remainder=0,coins=0,messages=0,voice_seconds=0,updated_at=unixepoch() WHERE guild_id=? AND user_id=?').run(guildId, userId);
+  db.prepare('DELETE FROM xp_events WHERE guild_id=? AND user_id=?').run(guildId, userId);
+  db.prepare('UPDATE voice_sessions SET started_at=? WHERE guild_id=? AND user_id=?').run(nowMs, guildId, userId);
+  return q.get.get(guildId, userId);
+});
+function resetMember(guildId, userId) { return resetMemberTransaction(guildId, userId, Date.now()); }
+
 function setSetting(guildId, key, value) {
   if (key === 'welcome_channel_id') return q.setWelcome.run(guildId, value).changes > 0;
   if (key === 'shop_channel_id') return q.setShop.run(guildId, value).changes > 0;
   if (key === 'shop_category_id') return q.setCategory.run(guildId, value).changes > 0;
+  if (key === 'level_up_channel_id') return q.setLevelUpChannel.run(guildId, value).changes > 0;
   throw new TypeError('Unknown setting');
 }
 function setRole(guildId, kind, level, roleId) {
@@ -187,9 +210,10 @@ function createPurchase(guildId, userId, key, name, price) {
 }
 function curveForGuild(guildId) {
   return normalizeCurve({
-    easyBase: getConfig(guildId,'level_easy_base','100'), easyStep: getConfig(guildId,'level_easy_step','4'),
-    mediumBase: getConfig(guildId,'level_medium_base','300'), mediumStep: getConfig(guildId,'level_medium_step','10'),
-    hardBase: getConfig(guildId,'level_hard_base','800'), hardStep: getConfig(guildId,'level_hard_step','20')
+    firstLevels: getConfig(guildId,'level_first_six','100,150,250,400,500,600').split(',').map(Number),
+    level7Base: getConfig(guildId,'level_7_base','750'),
+    level7Increment: getConfig(guildId,'level_7_increment','150'),
+    growthStep: getConfig(guildId,'level_growth_step','5')
   });
 }
 function levelForGuild(totalXp, guildId) { return baseLevelFor(totalXp, guildId ? curveForGuild(guildId) : undefined); }
@@ -351,7 +375,7 @@ function leaderboard(guildId, kind, period) {
 module.exports = {
   db, databasePath, ensureMember,
   levelFor: levelForGuild, curveForGuild,
-  addXp,
+  addXp, addCoins, resetMember,
   leaderboard, memberRank,
   stats: (guildId) => q.stats.get(guildId),
   startVoice: (guildId, userId, time) => q.voiceStart.run(guildId, userId, time || Date.now()),

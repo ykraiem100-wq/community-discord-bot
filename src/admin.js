@@ -47,7 +47,8 @@ async function homePayload(guildOrId) {
       { label: 'الغرف الخاصة', value: 'rooms', description: 'متابعة الغرف ومددها وتجديدها وإغلاقها', emoji: '🏠' },
       { label: 'اللوحات والرسائل', value: 'content', description: 'تعديل القوانين والمعلومات والرسائل', emoji: '📝' },
       { label: 'تشغيل وإيقاف الأنظمة', value: 'features', description: 'إيقاف أو تشغيل كل نظام', emoji: '⏯️' },
-      { label: 'العملات والمستويات', value: 'economy', description: 'تعديل XP والتحويل ومتطلبات المستويات', emoji: '📈' },
+      { label: 'العملات والمستويات', value: 'economy', description: 'تعديل XP والتحويل ومتطلبات المستويات وقناة الإشعارات', emoji: '📈' },
+      { label: 'أوامر إدارة الأعضاء', value: 'member_tools', description: 'إضافة عملات وXP وإعادة ضبط عضو مع تأكيد', emoji: '🛠️' },
       { label: 'رتب التفاعل', value: 'roles', description: 'تحديد رتب الإشعارات', emoji: '🔔' },
       { label: 'رتب المستويات', value: 'level_roles', description: 'ربط رتب بمستويات الكتابة والصوت', emoji: '🏅' },
       { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' }
@@ -137,15 +138,28 @@ function economyPayload(guildId) {
     message_xp: database.getConfig(guildId,'message_xp','7'),
     voice_xp: database.getConfig(guildId,'voice_xp','9'),
     xp_per_coin: database.getConfig(guildId,'xp_per_coin','250'),
-    easyBase: database.getConfig(guildId,'level_easy_base','100'), easyStep: database.getConfig(guildId,'level_easy_step','4'),
-    mediumBase: database.getConfig(guildId,'level_medium_base','300'), mediumStep: database.getConfig(guildId,'level_medium_step','10'),
-    hardBase: database.getConfig(guildId,'level_hard_base','800'), hardStep: database.getConfig(guildId,'level_hard_step','20')
+    firstLevels: database.curveForGuild(guildId).firstLevels.join(', '),
+    level7Base: database.curveForGuild(guildId).level7Base,
+    level7Increment: database.curveForGuild(guildId).level7Increment,
+    growthStep: database.curveForGuild(guildId).growthStep
   };
-  const embed = adminEmbed('📈 العملات والمستويات', `**الرسائل:** ${values.message_xp} XP\n**كل دقيقة فويس:** ${values.voice_xp} XP\n**التحويل:** كل ${values.xp_per_coin} XP = 1 DOS Coin\n\n**1–50:** سهل ← متوسط (${values.easyBase} + ${values.easyStep} لكل مستوى)\n**51–100:** متوسط ← صعب (${values.mediumBase} + ${values.mediumStep})\n**101+:** صعب (${values.hardBase} + ${values.hardStep})`);
+  const settings = database.settings(guildId);
+  const levelChannel = settings.level_up_channel_id ? `<#${settings.level_up_channel_id}>` : 'غير محددة (سيستخدم البوت قناة الرسالة التي رفعت المستوى)';
+  const embed = adminEmbed('📈 العملات والمستويات', `**الرسائل:** ${values.message_xp} XP\n**كل دقيقة فويس:** ${values.voice_xp} XP\n**التحويل:** كل ${values.xp_per_coin} XP = 1 DOS Coin\n\n**أول 6 مستويات:** ${values.firstLevels} XP\n**المستوى 7:** ${values.level7Base} XP\n**بعد ذلك:** تزيد المتطلبات ${values.level7Increment} XP أساسياً لكل مستوى، وتُضاف ${values.growthStep} XP إلى مقدار الزيادة في كل مستوى جديد.\n\n**قناة إشعارات اللفل:** ${levelChannel}`);
   return { embeds: [embed], components: [
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:economy:rates').setLabel('تعديل XP والعملات').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:economy:curve').setLabel('تعديل صعوبة المستويات').setStyle(ButtonStyle.Primary)),
-    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
+    new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:set-level-channel').setPlaceholder('اختياري: اختر روم إشعارات رفع المستوى').setChannelTypes(ChannelType.GuildText)),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:clear-level-channel').setLabel('استخدام قناة اللفل تلقائياً').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
   ] };
+}
+function memberToolsPayload() {
+  return { embeds: [adminEmbed('🛠️ أوامر إدارة الأعضاء', [
+    '**إضافة عملات:** `/add-coins member amount`',
+    '**إضافة XP:** `/add-xp member amount type` — اختر كتابة أو صوت، وتُحتسب مكافأة DOS Coin حسب معدل التحويل.',
+    '**إعادة ضبط:** `/reset-member member` — يعرض تأكيداً قبل تصفير عملات العضو وXP والرسائل ووقت الصوت وسجل TOP الدوري.',
+    '',
+    'الأوامر للإدارة فقط. إعادة الضبط لا تحذف سجل العضو من قاعدة البيانات ولا تؤثر على بقية الأعضاء.'
+  ].join('\n'))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] };
 }
 function rolesPayload(guildId) {
   const saved = database.interactionRoles(guildId);
@@ -249,9 +263,21 @@ async function handleAdminInteraction(interaction, client) {
       : section === 'content' ? contentAdminPayload()
       : section === 'features' ? featuresPayload(interaction.guildId)
       : section === 'economy' ? economyPayload(interaction.guildId)
+      : section === 'member_tools' ? memberToolsPayload()
       : section === 'roles' ? rolesPayload(interaction.guildId)
       : section === 'level_roles' ? levelRolesPayload(interaction.guildId) : salesPayload(interaction.guildId);
     return interaction.update(payload);
+  }
+  if (parts[1] === 'member-reset' && ['confirm','cancel'].includes(parts[2])) {
+    const targetId = parts[3];
+    const actorId = parts[4];
+    if (interaction.user.id !== actorId) return interaction.reply({ content: 'فقط المسؤول الذي بدأ العملية يستطيع تأكيدها أو إلغاءها.', flags: MessageFlags.Ephemeral });
+    if (parts[2] === 'cancel') return interaction.update({ content: 'تم إلغاء إعادة الضبط. لم تتغير بيانات العضو.', embeds: [], components: [] });
+    const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+    if (!member) return interaction.update({ content: 'تعذر العثور على العضو. لم يتم تغيير أي بيانات.', embeds: [], components: [] });
+    database.resetMember(interaction.guildId, targetId);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'member_reset', `target=${targetId}`);
+    return interaction.update({ content: `✅ تمت إعادة ضبط بيانات ${member.user.tag}. صُفّرت العملات وXP والرسائل ووقت الصوت، مع إبقاء سجل العضو وقاعدة البيانات.`, embeds: [], components: [] });
   }
   if (parts[1] === 'feature') {
     const key = parts[2];
@@ -307,6 +333,17 @@ async function handleAdminInteraction(interaction, client) {
     return interaction.update({ content: `✅ تم نشر/تحديث المتجر في ${channel}.`, embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:back').setLabel('رجوع للمتجر').setStyle(ButtonStyle.Secondary))] });
   }
   if (parts[1] === 'shop' && parts[2] === 'settings') return interaction.update(shopSettingsPayload(interaction.guildId));
+  if (parts[1] === 'clear-level-channel') {
+    database.setSetting(interaction.guildId, 'level_up_channel_id', null);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'level_up_channel_setting', 'default');
+    return interaction.update(economyPayload(interaction.guildId));
+  }
+  if (parts[1] === 'set-level-channel' && interaction.isChannelSelectMenu()) {
+    const channelId = interaction.values[0];
+    database.setSetting(interaction.guildId, 'level_up_channel_id', channelId);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'level_up_channel_setting', channelId);
+    return interaction.update(economyPayload(interaction.guildId));
+  }
   if ((parts[1] === 'set-shop-channel' || parts[1] === 'set-room-category') && interaction.isChannelSelectMenu()) {
     const channelId = interaction.values[0];
     database.setSetting(interaction.guildId, parts[1] === 'set-shop-channel' ? 'shop_channel_id' : 'shop_category_id', channelId);
@@ -397,11 +434,12 @@ async function handleAdminInteraction(interaction, client) {
     return interaction.showModal(modal);
   }
   if (parts[1] === 'economy' && parts[2] === 'curve') {
+    const curve = database.curveForGuild(interaction.guildId);
     const modal = new ModalBuilder().setCustomId('admin:economy:save-curve').setTitle('تعديل صعوبة المستويات')
       .addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('easy').setLabel('1-50: البداية والزيادة (100,4)').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_easy_base','100')},${database.getConfig(interaction.guildId,'level_easy_step','4')}`).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('medium').setLabel('المستويات 51–100: البداية, الزيادة').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_medium_base','300')},${database.getConfig(interaction.guildId,'level_medium_step','10')}`).setRequired(true)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('hard').setLabel('المستوى 101+: البداية, الزيادة').setStyle(TextInputStyle.Short).setValue(`${database.getConfig(interaction.guildId,'level_hard_base','800')},${database.getConfig(interaction.guildId,'level_hard_step','20')}`).setRequired(true))
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('first').setLabel('متطلبات أول 6 مستويات (مفصولة بفواصل)').setStyle(TextInputStyle.Short).setValue(curve.firstLevels.join(',')).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('later').setLabel('المستوى 7، والزيادة الأساسية (مثال 750,150)').setStyle(TextInputStyle.Short).setValue(`${curve.level7Base},${curve.level7Increment}`).setRequired(true)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('growth').setLabel('زيادة مقدار التصاعد لكل مستوى (مثال 5)').setStyle(TextInputStyle.Short).setValue(String(curve.growthStep)).setRequired(true))
       );
     return interaction.showModal(modal);
   }
@@ -472,20 +510,25 @@ async function handleAdminModal(interaction) {
     return interaction.reply({ content: '✅ تم حفظ معدلات الرسائل والصوت وتحويل XP إلى DOS Coin. القيم الجديدة تطبق على المكاسب القادمة.', flags: MessageFlags.Ephemeral });
   }
   if (parts[1] === 'economy' && parts[2] === 'save-curve') {
-    const parsePair = (key) => interaction.fields.getTextInputValue(key).split(',').map((item) => Number(item.trim()));
-    const pairs = [['easy','level_easy_base','level_easy_step'],['medium','level_medium_base','level_medium_step'],['hard','level_hard_base','level_hard_step']];
-    const values = pairs.map(([field,base,step]) => ({ base, step, pair: parsePair(field) }));
-    if (values.some((v) => v.pair.length !== 2 || v.pair.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 100000))) return interaction.reply({ content: 'اكتب كل مرحلة بصيغة رقمين مثل 100,4، والقيم من 1 إلى 100000.', flags: MessageFlags.Ephemeral });
-    const [easy,medium,hard] = values.map((v) => v.pair);
-    if (medium[0] < easy[0] + 49 * easy[1] || hard[0] < medium[0] + 49 * medium[1]) return interaction.reply({ content: 'للحفاظ على التدرج، يجب أن تكون بداية المرحلة التالية أكبر من متطلبات آخر مستوى في المرحلة السابقة.', flags: MessageFlags.Ephemeral });
-    for (const value of values) {
-      database.setConfig(interaction.guildId,value.base,value.pair[0],interaction.user.id);
-      database.setConfig(interaction.guildId,value.step,value.pair[1],interaction.user.id);
+    const first = interaction.fields.getTextInputValue('first').split(',').map((item) => Number(item.trim()));
+    const later = interaction.fields.getTextInputValue('later').split(',').map((item) => Number(item.trim()));
+    const growth = Number(interaction.fields.getTextInputValue('growth').trim());
+    if (first.length !== 6 || first.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 100000) ||
+        later.length !== 2 || later.some((n) => !Number.isSafeInteger(n) || n < 1 || n > 100000) ||
+        !Number.isSafeInteger(growth) || growth < 0 || growth > 100000) {
+      return interaction.reply({ content: 'أدخل 6 أرقام صحيحة لأول المستويات، ورقمين للمستوى 7 والزيادة الأساسية، ورقماً صحيحاً للتصاعد.', flags: MessageFlags.Ephemeral });
     }
-    database.logAdmin(interaction.guildId,interaction.user.id,'level_curve_update',JSON.stringify(values.map((v) => v.pair)));
-    return interaction.reply({ content: '✅ تم تحديث منحنى XP. المراحل بقيت 1–50 ثم 51–100 ثم 101+، والتدرج الجديد يطبق على حساب المستويات.', flags: MessageFlags.Ephemeral });
+    if (first.some((value, index) => index > 0 && value <= first[index - 1]) || later[0] <= first[5]) {
+      return interaction.reply({ content: 'يجب أن يزيد XP المطلوب في كل مستوى عن المستوى الذي قبله.', flags: MessageFlags.Ephemeral });
+    }
+    database.setConfig(interaction.guildId, 'level_first_six', first.join(','), interaction.user.id);
+    database.setConfig(interaction.guildId, 'level_7_base', later[0], interaction.user.id);
+    database.setConfig(interaction.guildId, 'level_7_increment', later[1], interaction.user.id);
+    database.setConfig(interaction.guildId, 'level_growth_step', growth, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'level_curve_update', JSON.stringify({ first, level7Base: later[0], level7Increment: later[1], growthStep: growth }));
+    return interaction.reply({ content: '✅ تم تحديث منحنى XP التصاعدي. بيانات XP والعملات لم تُصفّر؛ سيُعاد حساب المستوى وفق المنحنى الجديد.', flags: MessageFlags.Ephemeral });
   }
   return false;
 }
 
-module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, contentAdminPayload, featuresPayload, economyPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };
+module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, contentAdminPayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };

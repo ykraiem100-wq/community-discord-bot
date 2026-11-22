@@ -46,7 +46,17 @@ const slashCommands = [
       .addChoices({name:'منذ البداية',value:'all'},{name:'يومي',value:'daily'},{name:'أسبوعي',value:'weekly'},{name:'شهري',value:'monthly'})),
   new SlashCommandBuilder().setName('color-selection').setDescription('استكمال اختيار لون منتج اشتريته')
     .addIntegerOption((option) => option.setName('order_id').setDescription('رقم طلب اللون').setRequired(true)),
-  new SlashCommandBuilder().setName('admin-panel').setDescription('فتح لوحة إدارة DOS COMMUNITY')
+  new SlashCommandBuilder().setName('admin-panel').setDescription('فتح لوحة إدارة DOS COMMUNITY'),
+  new SlashCommandBuilder().setName('add-coins').setDescription('إضافة عملات DOS إلى عضو (للإدارة فقط)')
+    .addUserOption((option) => option.setName('member').setDescription('العضو المستهدف').setRequired(true))
+    .addIntegerOption((option) => option.setName('amount').setDescription('عدد العملات').setRequired(true).setMinValue(1).setMaxValue(1000000000)),
+  new SlashCommandBuilder().setName('add-xp').setDescription('إضافة XP إلى عضو (للإدارة فقط)')
+    .addUserOption((option) => option.setName('member').setDescription('العضو المستهدف').setRequired(true))
+    .addIntegerOption((option) => option.setName('amount').setDescription('كمية XP').setRequired(true).setMinValue(1).setMaxValue(1000000000))
+    .addStringOption((option) => option.setName('type').setDescription('نوع XP').setRequired(true)
+      .addChoices({ name: 'كتابي', value: 'text' }, { name: 'صوتي', value: 'voice' })),
+  new SlashCommandBuilder().setName('reset-member').setDescription('إعادة ضبط بيانات عضو بعد التأكيد (للإدارة فقط)')
+    .addUserOption((option) => option.setName('member').setDescription('العضو المستهدف').setRequired(true))
 ].map((command) => command.toJSON());
 
 async function registerSlashCommands() {
@@ -68,7 +78,9 @@ function helpEmbed() {
     '.دعواتي — عدد الأعضاء الذين انضموا من رابطك الشخصي',
     '.رابط — إرسال رابط دعوة شخصي إلى الخاص',
     'للإدارة: /admin-panel — لوحة التحكم التفاعلية',
-    'للإدارة: .تعيين_قناة متجر #قناة',
+    'للإدارة: /add-coins و /add-xp و /reset-member (مع تأكيد لإعادة الضبط)',
+    'للإدارة: .اضافة_عملات @عضو 500 أو .اضافة_xp @عضو 500 كتابة',
+    'للإدارة: .تعيين_قناة متجر #قناة أو .تعيين_قناة لفل #قناة',
     'للإدارة: .رتبة_مستوى كتابة 10 @رتبة أو .رتبة_مستوى صوت 10 @رتبة'
   ].join('\n')).setFooter({ text: '7 XP لكل رسالة • 9 XP لكل دقيقة صوت • 250 XP = 1 DOS Coin (قابلة للتعديل من الإدارة)' });
 }
@@ -118,6 +130,45 @@ async function sendLevelUpNotice(channel, user, level) {
     files: [new AttachmentBuilder(image, { name: 'dos-level-up.png' })]
   }).catch((error) => console.warn('[LEVEL-UP] Could not send notice:', error.message));
 }
+async function sendConfiguredLevelUpNotice(guild, fallbackChannel, user, level) {
+  if (!guild) return;
+  const settings = database.settings(guild.id);
+  let channel = settings.level_up_channel_id
+    ? await guild.channels.fetch(settings.level_up_channel_id).catch(() => null)
+    : null;
+  if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') channel = fallbackChannel;
+  if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') channel = guild.systemChannel;
+  if (channel) await sendLevelUpNotice(channel, user, level);
+}
+function memberResetConfirmationPayload(member, actorId) {
+  return {
+    content: `⚠️ هل أنت متأكد من إعادة ضبط بيانات ${member}؟\nسيتم تصفير DOS Coin وXP الكتابي والصوتي وإجمالي XP والرسائل ووقت الصوت وسجل TOP الدوري. لن يتم حذف سجل العضو من قاعدة البيانات.`,
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:member-reset:confirm:${member.id}:${actorId}`).setLabel('تأكيد إعادة الضبط').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`admin:member-reset:cancel:${member.id}:${actorId}`).setLabel('إلغاء').setStyle(ButtonStyle.Secondary)
+    )]
+  };
+}
+function validAdminAmount(value) {
+  const amount = Number(value);
+  return Number.isSafeInteger(amount) && amount >= 1 && amount <= 1000000000 ? amount : null;
+}
+async function awardAdminXp(guild, channel, user, kind, amount, actorId) {
+  const result = database.addXp(guild.id, user.id, kind, amount, {
+    awardXp: true, awardCoins: true,
+    xpPerCoin: Number(database.getConfig(guild.id, 'xp_per_coin', '250'))
+  });
+  database.logAdmin(guild.id, actorId, 'member_add_xp', `target=${user.id};kind=${kind};amount=${amount};coins=${result.coinsEarned}`);
+  if (result.newTextLevel > result.oldTextLevel || result.newVoiceLevel > result.oldVoiceLevel) {
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    if (kind === 'text' && member) await assignLevelRole(member, 'text', result.newTextLevel);
+    if (kind === 'voice' && member) await assignLevelRole(member, 'voice', result.newVoiceLevel);
+    const level = kind === 'text' ? result.newTextLevel : result.newVoiceLevel;
+    await sendConfiguredLevelUpNotice(guild, channel, user, level);
+  }
+  return result;
+}
+
 async function awardVoice(guildId,userId) {
   const session = database.voice(guildId,userId);
   if (!session) return;
@@ -134,7 +185,7 @@ async function awardVoice(guildId,userId) {
     let member = guild && guild.members.cache.get(userId);
     if (!member && guild) member = await guild.members.fetch(userId).catch(() => null);
     await assignLevelRole(member,'voice',result.newVoiceLevel);
-    if (member && guild && guild.systemChannel) await sendLevelUpNotice(guild.systemChannel, member.user, result.newVoiceLevel);
+    if (member && guild) await sendConfiguredLevelUpNotice(guild, guild.systemChannel, member.user, result.newVoiceLevel);
   }
 }
 async function handleCommand(message) {
@@ -200,12 +251,36 @@ async function handleCommand(message) {
       if (!database.reviewOrder(guildId,orderId,status,userId)) return message.reply('الطلب غير موجود أو تمت مراجعته مسبقاً.');
       return message.reply(status === 'approved' ? `تم قبول الطلب #${orderId}.` : `تم رفض الطلب #${orderId} وإعادة العملات لصاحبه.`);
     }
+    if (['اضافة_عملات','إضافة_عملات','add-coins'].includes(command)) {
+      if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
+      const target = message.mentions.users.first();
+      const amount = validAdminAmount(args.find((value) => /^\d+$/.test(value)));
+      if (!target || !amount) return message.reply('استخدم: .اضافة_عملات @عضو 500');
+      const profile = database.addCoins(guildId,target.id,amount);
+      database.logAdmin(guildId,userId,'member_add_coins',`target=${target.id};amount=${amount}`);
+      return message.reply(`✅ تمت إضافة **${amount.toLocaleString('en-US')} DOS Coin** إلى محفظة <@${target.id}>. الرصيد الآن: **${Number(profile.coins).toLocaleString('en-US')}**.`);
+    }
+    if (['اضافة_xp','إضافة_xp','اضافة_خبرة','إضافة_خبرة','add-xp'].includes(command)) {
+      if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
+      const target = message.mentions.users.first();
+      const amount = validAdminAmount(args.find((value) => /^\d+$/.test(value)));
+      const kind = args.includes('صوت') || args.includes('صوتي') ? 'voice' : 'text';
+      if (!target || !amount) return message.reply('استخدم: .اضافة_xp @عضو 500 كتابة أو .اضافة_xp @عضو 500 صوت');
+      const result = await awardAdminXp(message.guild,message.channel,target,kind,amount,userId);
+      return message.reply(`✅ تمت إضافة **${amount.toLocaleString('en-US')} XP** إلى <@${target.id}> (${kind === 'text' ? 'كتابي' : 'صوتي'}). مكافأة التحويل: **${result.coinsEarned} DOS Coin**.`);
+    }
+    if (['reset','ريست','reset-member'].includes(command)) {
+      if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
+      const target = message.mentions.users.first();
+      if (!target || target.bot) return message.reply('استخدم: .reset @عضو');
+      return message.reply(memberResetConfirmationPayload(target,userId));
+    }
     if (command === 'تعيين_قناة') {
       if (!isAdmin(message.member,userId)) return message.reply('هذا الأمر للإدارة فقط.');
       const channel = message.mentions.channels.first();
       if (!channel) return message.reply('اذكر القناة المطلوبة.');
-      const key = args[0] === 'متجر' ? 'shop_channel_id' : null;
-      if (!key) return message.reply('استخدم: .تعيين_قناة متجر #قناة.');
+      const key = args[0] === 'متجر' ? 'shop_channel_id' : ['لفل','مستويات','اشعارات'].includes(args[0]) ? 'level_up_channel_id' : null;
+      if (!key) return message.reply('استخدم: .تعيين_قناة متجر #قناة أو .تعيين_قناة لفل #قناة.');
       database.setSetting(guildId,key,channel.id);
       return message.reply(`تم تعيين قناة ${args[0]}: ${channel}`);
     }
@@ -230,6 +305,29 @@ async function handleSlashCommand(interaction) {
   if (interaction.commandName === 'admin-panel') {
     if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
     return interaction.reply({ ...await homePayload(interaction.guild),flags:MessageFlags.Ephemeral });
+  }
+  if (['add-coins','add-xp','reset-member'].includes(interaction.commandName)) {
+    if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) {
+      return interaction.reply({ content: 'هذه الأوامر للإدارة فقط.', flags: MessageFlags.Ephemeral });
+    }
+    const target = interaction.options.getUser('member',true);
+    if (target.bot) return interaction.reply({ content: 'لا يمكن تعديل بيانات حساب بوت.', flags: MessageFlags.Ephemeral });
+    if (interaction.commandName === 'add-coins') {
+      const amount = validAdminAmount(interaction.options.getInteger('amount',true));
+      if (!amount) return interaction.reply({ content: 'عدد العملات غير صالح.', flags: MessageFlags.Ephemeral });
+      const profile = database.addCoins(guildId,target.id,amount);
+      database.logAdmin(guildId,interaction.user.id,'member_add_coins',`target=${target.id};amount=${amount}`);
+      return interaction.reply({ content: `✅ تمت إضافة **${amount.toLocaleString('en-US')} DOS Coin** إلى ${target}. الرصيد الآن: **${Number(profile.coins).toLocaleString('en-US')}**.`, flags: MessageFlags.Ephemeral });
+    }
+    if (interaction.commandName === 'add-xp') {
+      const amount = validAdminAmount(interaction.options.getInteger('amount',true));
+      if (!amount) return interaction.reply({ content: 'كمية XP غير صالحة.', flags: MessageFlags.Ephemeral });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const kind = interaction.options.getString('type',true);
+      const result = await awardAdminXp(interaction.guild,interaction.channel,target,kind,amount,interaction.user.id);
+      return interaction.editReply({ content: `✅ تمت إضافة **${amount.toLocaleString('en-US')} XP** إلى ${target} (${kind === 'text' ? 'كتابي' : 'صوتي'}). مكافأة التحويل: **${result.coinsEarned} DOS Coin**.` });
+    }
+    return interaction.reply({ ...memberResetConfirmationPayload(target,interaction.user.id), flags: MessageFlags.Ephemeral });
   }
   if (interaction.commandName === 'wallet') {
     if (!database.featureEnabled(guildId,'economy')) return interaction.reply({content:'المحفظة متوقفة مؤقتاً.',flags:MessageFlags.Ephemeral});
@@ -345,7 +443,7 @@ client.on('messageCreate',async (message) => {
     const result = database.addXp(guildId,message.author.id,'text',rate,{message:true,awardXp,awardCoins,xpPerCoin:Number(database.getConfig(guildId,'xp_per_coin','250'))});
     if (awardXp && result.newTextLevel > result.oldTextLevel) {
       await assignLevelRole(message.member,'text',result.newTextLevel);
-      await sendLevelUpNotice(message.channel, message.author, result.newTextLevel);
+      await sendConfiguredLevelUpNotice(message.guild, message.channel, message.author, result.newTextLevel);
     }
   } catch (error) { console.error('[XP] Message XP failed:',error); }
 });
