@@ -12,7 +12,6 @@ level-system-base.png       retained legacy infographic reference
 level-up-base.png           active: level-up announcement
 admin-dashboard-base.png   legacy dashboard reference; current /admin-panel uses a clean cyan/silver live header and real command menu
 admin-shop-base.png         legacy admin reference; current sections show real products and actions
-shop-crest-bg.png           active: cyan/silver crest and treasure background; live guild icon is composited into the center
-shop-title-overlay.png      active: crisp CREDITS SHOP title and feature labels baked into the image
+shop-crest-bg.png           active: full-width cyan/silver crest and treasure background; large DOS wordmark is placed in the center medallion
 
 The source screenshots and crops are preserved in assets/design-references/. Do not remove the active templates or rename them. The archive does not contain production SQLite data or .env secrets.
