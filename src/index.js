@@ -95,13 +95,28 @@ async function registerSlashCommands() {
   if (!clientId) return;
   const rest = new REST({ version: '10' }).setToken(token);
   const fastGuildId = targetGuildId || (client.guilds.cache.size === 1 ? client.guilds.cache.first().id : '');
-  const route = fastGuildId ? Routes.applicationGuildCommands(clientId,fastGuildId) : Routes.applicationCommands(clientId);
-  await rest.put(route,{ body: slashCommands });
-  console.log(`[SLASH] Registered ${slashCommands.length} commands ${fastGuildId ? 'for guild '+fastGuildId : 'globally'}.`);
+  const guildIds = new Set([...client.guilds.cache.keys(), ...(targetGuildId ? [targetGuildId] : [])]);
+  const names = slashCommands.map((command) => command.name);
+  if (new Set(names).size !== names.length) throw new Error('Duplicate slash command names found in source registry.');
+
+  // Discord keeps global and guild commands in separate scopes. Replacing only
+  // one scope leaves stale copies from older deployments visible beside the new
+  // list, so clear the unused scope before publishing exactly one active set.
+  if (fastGuildId) {
+    await rest.put(Routes.applicationCommands(clientId), { body: [] });
+    for (const guildId of guildIds) {
+      if (guildId !== fastGuildId) await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+    }
+    await rest.put(Routes.applicationGuildCommands(clientId, fastGuildId), { body: slashCommands });
+  } else {
+    for (const guildId of guildIds) await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+    await rest.put(Routes.applicationCommands(clientId), { body: slashCommands });
+  }
+  console.log(`[SLASH] Replaced stale command scopes and registered ${slashCommands.length} unique commands ${fastGuildId ? 'for guild '+fastGuildId : 'globally'}.`);
 }
 function helpEmbed() {
   return new EmbedBuilder().setColor(CYAN).setTitle('DOS COMMUNITY • الأوامر').setDescription([
-    '/wallet أو .محفظتي — عرض المحفظة',
+    '/wallet أو .محفظتي أو r — عرض المحفظة',
     '/top أو اكتب TOP — المتصدرون',
     '/shop أو .المتجر — متجر DOS',
     '/color-selection — استكمال اختيار اللون برقم الطلب إن تعذّر فتح الرسائل الخاصة',
@@ -143,10 +158,13 @@ async function topPayload(guild, kind, period) {
   const entries = await Promise.all(rows.slice(0, 10).map(async (row) => {
     let member = guild.members.cache.get(row.user_id);
     if (!member) member = await guild.members.fetch(row.user_id).catch(() => null);
+    let user = member?.user || null;
+    if (!user && guild.client?.users?.fetch) user = await guild.client.users.fetch(row.user_id).catch(() => null);
     return {
-      name: member ? member.displayName : ('عضو ' + String(row.user_id).slice(-4)),
+      name: member ? member.displayName : (user?.globalName || user?.username || `Member ${String(row.user_id).slice(-4)}`),
+      fallbackName: user?.globalName || user?.username || `Member ${String(row.user_id).slice(-4)}`,
       score: Number(row.score || 0),
-      avatarURL: member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : null
+      avatarURL: member ? member.displayAvatarURL({ extension: 'png', size: 128 }) : (user ? user.displayAvatarURL({ extension: 'png', size: 128 }) : null)
     };
   }));
   const image = await renderTopLeaderboard({ guild, entries, period, metric: kind });
@@ -563,6 +581,17 @@ client.on('guildMemberAdd', (member) => {
 client.on('messageCreate',async (message) => {
   if (!message.guild || message.author.bot) return;
   const trimmed = message.content.trim();
+  // Single-letter wallet shortcut, exactly `r` (no dot/prefix required).
+  // Handle it before message XP so running the shortcut does not grant XP.
+  if (/^r$/i.test(trimmed)) {
+    if (!commandEnabled(message.guild.id, 'wallet')) return message.reply('أمر المحفظة متوقف حالياً من لوحة التحكم.');
+    if (!database.featureEnabled(message.guild.id, 'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
+    try { return await message.reply(await walletPayload(message.guild, message.author)); }
+    catch (error) {
+      console.error('[WALLET SHORTCUT] r failed:', error);
+      return message.reply('تعذر إنشاء صورة المحفظة حالياً. حاول مرة أخرى بعد قليل.').catch(() => {});
+    }
+  }
   try { await checkDailyQuestionAnswer(message); }
   catch (error) { console.error('[DAILY QUESTION] Answer check failed:', error); }
   try {

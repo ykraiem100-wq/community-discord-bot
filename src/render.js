@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
+const { normalizeLeaderboardName } = require('./leaderboard-name');
 
 const ROOT = path.resolve(__dirname, '..');
 const TEMPLATE_DIR = path.join(ROOT, 'assets', 'templates');
@@ -12,14 +13,14 @@ const C = Object.freeze({
   muted: '#B9C8D6', cyan: '#55DDF5', cyanBright: '#A7F3FF', gold: '#63DDF5',
   green: '#69DEB6', red: '#63DDF5'
 });
-const FONT = 'DOSArabic, DOSLatin, Arial, sans-serif';
+const FONT = 'DOSArabicRegular, DOSLatinRegular, Arial, sans-serif';
 
 function registerFonts() {
   for (const [file, family] of [
-    ['NotoSansArabic-Regular.ttf', 'DOSArabic'],
-    ['NotoSansArabic-Bold.ttf', 'DOSArabic'],
-    ['NotoSans-Regular.ttf', 'DOSLatin'],
-    ['NotoSans-Bold.ttf', 'DOSLatin']
+    ['NotoSansArabic-Regular.ttf', 'DOSArabicRegular'],
+    ['NotoSansArabic-Bold.ttf', 'DOSArabicBold'],
+    ['NotoSans-Regular.ttf', 'DOSLatinRegular'],
+    ['NotoSans-Bold.ttf', 'DOSLatinBold']
   ]) {
     const full = path.join(FONT_DIR, file);
     if (!fs.existsSync(full)) continue;
@@ -52,8 +53,13 @@ function drawText(ctx, value, x, y, size = 18, color = C.white, weight = 700, al
   const text = String(value ?? '');
   ctx.save();
   const hasArabic = /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/.test(text);
-  const fontStack = hasArabic ? 'DOSArabic, DOSLatin, Arial, sans-serif' : 'DOSLatin, DOSArabic, Arial, sans-serif';
-  ctx.font = `${weight} ${size}px ${fontStack}`;
+  // Register regular and bold faces under separate family aliases. Reusing one
+  // alias for both files made some deployments select the wrong face and draw
+  // tofu boxes for Arabic display names.
+  const fontFamily = hasArabic
+    ? (weight >= 600 ? 'DOSArabicBold' : 'DOSArabicRegular')
+    : (weight >= 600 ? 'DOSLatinBold' : 'DOSLatinRegular');
+  ctx.font = `${weight} ${size}px \"${fontFamily}\", Arial, sans-serif`;
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
@@ -109,7 +115,10 @@ function drawImageCover(ctx, image, x, y, width, height, radius = 8) {
 function formatNumber(value) { return Math.max(0, Number(value) || 0).toLocaleString('en-US'); }
 function truncate(value, max = 22) {
   const text = String(value ?? '');
-  return text.length > max ? text.slice(0, max - 1) + '…' : text;
+  const parts = typeof Intl.Segmenter === 'function'
+    ? [...new Intl.Segmenter('ar', { granularity: 'grapheme' }).segment(text)].map((part) => part.segment)
+    : Array.from(text);
+  return parts.length > max ? parts.slice(0, max - 1).join('') + '…' : text;
 }
 function wrapLines(ctx, value, width, size, maxLines = 3) {
   ctx.save(); ctx.font = `600 ${size}px ${FONT}`;
@@ -177,7 +186,9 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
   // Clip the profile photo to a mathematically perfect circle (not a rounded square).
   // The template's inner portrait aperture is about 100px wide. Keep the
   // avatar centered and fill the opening without covering the metallic rim.
-  drawCircleImage(ctx, avatar, 47, 39, 108, '#C8F4FF', 0.7);
+  // Aperture center is ~104,104 in wallet-base.png. Match the inner circle
+  // rather than the outer silver wreath so the photo fills the opening evenly.
+  drawCircleImage(ctx, avatar, 56, 56, 96, '#C8F4FF', 0.65);
 
   const name = displayName || (user && (user.globalName || user.username)) || 'عضو DOS';
   drawText(ctx, name.startsWith('@') ? name : '@' + name, 210, 92, 17, C.white, 900, 'left', 235);
@@ -202,8 +213,8 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
 }
 
 
-// Cyan DOS member welcome artwork. All editable copy stays in the Discord embed
-// so Arabic text and member mentions remain crisp and selectable.
+// Cyan DOS member welcome artwork. The fixed brand lockup is drawn into the image;
+// the member-specific welcome text remains editable in the ordinary Discord message.
 async function renderMemberWelcomeCard({ user = null, guild = null } = {}) {
   const bg = await loadTemplate('member-welcome-base.png');
   const { canvas, ctx } = scaleCanvas(bg, 1);
@@ -214,8 +225,15 @@ async function renderMemberWelcomeCard({ user = null, guild = null } = {}) {
   const logo = await loadTemplate('dos-community-logo.png');
   drawBrandLogo(ctx, logo, 1514, 417, 168, '#55DDF5');
 
-  // Keep the center panel free of baked-in wording. The editable welcome copy
-  // is sent as a normal Discord message above this image.
+  // Owner-requested fixed brand lockup: editable member copy remains outside
+  // the artwork, while this central identity text is part of the image.
+  drawText(ctx, 'Welcome To', 1010, 394, 54, '#80E9FF', 900, 'center', 560);
+  drawText(ctx, '『DOS』', 1010, 510, 104, '#F5FBFF', 900, 'center', 560);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(85,221,245,0.9)'; ctx.lineWidth = 4;
+  ctx.shadowColor = '#55DDF5'; ctx.shadowBlur = 14;
+  ctx.beginPath(); ctx.moveTo(875, 445); ctx.lineTo(1145, 445); ctx.stroke();
+  ctx.restore();
   return canvas.toBuffer('image/png');
 }
 
@@ -226,7 +244,9 @@ async function renderTopLeaderboard({ guild = null, entries = [], period = 'all'
   const rows = (entries || []).slice(0, 6);
   const metricNames = { all: 'الخبرة (XP)', text: 'الخبرة الكتابية (XP)', voice: 'الخبرة الصوتية (XP)', coins: 'DOS Coin' };
   const periodNames = { all: 'منذ البداية', daily: 'اليومي', weekly: 'الأسبوعي', monthly: 'الشهري' };
-  patch(ctx, 145, 5, 220, 48, 'rgba(2,10,18,0.90)', 7);
+  // Fully mask the sample heading and names baked into the template. A 0.90
+  // alpha left the original placeholder letters visible underneath live text.
+  patch(ctx, 143, 3, 224, 52, 'rgba(2,10,18,1)', 7);
   drawText(ctx, `المتصدرون - ${metricNames[metric] || metricNames.all}`, 255, 22, 14, C.white, 900, 'center', 210);
   drawText(ctx, periodNames[period] || periodNames.all, 255, 40, 9, C.cyan, 800, 'center', 210);
 
@@ -248,22 +268,22 @@ async function renderTopLeaderboard({ guild = null, entries = [], period = 'all'
   ];
   for (const slot of podium) {
     const entry = rows[slot.index];
-    patch(ctx, slot.x, 145, slot.w, 63, 'rgba(3,12,22,0.94)', 5);
+    patch(ctx, slot.x, 145, slot.w, 63, 'rgba(3,12,22,1)', 5);
     if (!entry) {
       drawText(ctx, `#${slot.index + 1}`, slot.x + slot.w / 2, 160, 12, slot.color, 900, 'center', slot.w - 10);
       drawText(ctx, '—', slot.x + slot.w / 2, 185, 12, C.muted, 700, 'center', slot.w - 10);
       continue;
     }
     drawText(ctx, `#${slot.index + 1}`, slot.x + slot.w / 2, 155, 11, slot.color, 900, 'center', slot.w - 10);
-    drawText(ctx, truncate(entry.name || 'عضو DOS', 16), slot.x + slot.w / 2, 174, 11, C.white, 800, 'center', slot.w - 12);
+    drawText(ctx, truncate(normalizeLeaderboardName(entry.name, entry.fallbackName), 16), slot.x + slot.w / 2, 174, 11, C.white, 800, 'center', slot.w - 12);
     drawText(ctx, formatNumber(entry.score), slot.x + slot.w / 2, 193, 10, slot.color, 800, 'center', slot.w - 12);
   }
   for (let i = 0; i < 3; i += 1) {
     const entry = rows[i + 3];
     const y = [230, 260, 289][i];
-    patch(ctx, 39, y - 12, 430, 25, 'rgba(4,14,24,0.94)', 4);
+    patch(ctx, 39, y - 12, 430, 25, 'rgba(4,14,24,1)', 4);
     drawText(ctx, `#${i + 4}`, 52, y, 11, C.cyan, 900, 'left', 35);
-    drawText(ctx, entry ? truncate(entry.name || 'عضو DOS', 24) : '—', 91, y, 11, C.white, 700, 'left', 240);
+    drawText(ctx, entry ? truncate(normalizeLeaderboardName(entry.name, entry.fallbackName), 24) : '—', 91, y, 11, C.white, 700, 'left', 240);
     drawText(ctx, entry ? formatNumber(entry.score) : '—', 461, y, 11, C.silver, 800, 'right', 95);
   }
   return canvas.toBuffer('image/png');
@@ -597,5 +617,6 @@ module.exports = {
   renderShopHeader,
   renderColorWheel,
   renderAdminSection,
+  normalizeLeaderboardName,
   TEMPLATE_DIR
 };
