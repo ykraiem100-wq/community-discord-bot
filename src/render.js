@@ -79,13 +79,19 @@ function patch(ctx, x, y, width, height, fill = 'rgba(3,12,22,0.92)', radius = 7
 function roundedClip(ctx, x, y, width, height, radius) {
   ctx.beginPath(); ctx.roundRect(x, y, width, height, radius); ctx.clip();
 }
-function drawCircleImage(ctx, image, x, y, size, border = C.cyan, lineWidth = 2) {
+function drawCircleImage(ctx, image, x, y, size, border = C.cyan, lineWidth = 2, imageScale = 1) {
   ctx.save();
   ctx.beginPath(); ctx.arc(x + size / 2, y + size / 2, size / 2 + lineWidth + 1, 0, Math.PI * 2);
   ctx.strokeStyle = border; ctx.lineWidth = lineWidth; ctx.shadowColor = border; ctx.shadowBlur = 8; ctx.stroke();
   ctx.shadowBlur = 0;
   ctx.beginPath(); ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2); ctx.clip();
-  if (image) ctx.drawImage(image, x, y, size, size);
+  if (image) {
+    // Slight overscan is useful for circular portraits/logos: the mask stays
+    // exact, while the source artwork is enlarged behind it to avoid hairline gaps.
+    const drawSize = size * Math.max(1, Number(imageScale) || 1);
+    const inset = (drawSize - size) / 2;
+    ctx.drawImage(image, x - inset, y - inset, drawSize, drawSize);
+  }
   else {
     const g = ctx.createLinearGradient(x, y, x + size, y + size);
     g.addColorStop(0, '#15516D'); g.addColorStop(1, '#07121E');
@@ -184,11 +190,10 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
     ? user.displayAvatarURL({ extension: 'png', size: 512 }) : null;
   const avatar = await loadSafeImage(avatarUrl);
   // Clip the profile photo to a mathematically perfect circle (not a rounded square).
-  // The template's inner portrait aperture is about 100px wide. Keep the
-  // avatar centered and fill the opening without covering the metallic rim.
-  // Aperture center is ~104,104 in wallet-base.png. Match the inner circle
-  // rather than the outer silver wreath so the photo fills the opening evenly.
-  drawCircleImage(ctx, avatar, 56, 56, 96, '#C8F4FF', 0.65);
+  // The portrait opening is centered at (104,104) and is approximately 100px
+  // across. Use a 100px circular mask and a tiny 4% overscan so the avatar
+  // reaches the inside edge with no visible gap while leaving the silver rim clear.
+  drawCircleImage(ctx, avatar, 54, 54, 100, '#C8F4FF', 0.65, 1.04);
 
   const name = displayName || (user && (user.globalName || user.username)) || 'عضو DOS';
   drawText(ctx, name.startsWith('@') ? name : '@' + name, 210, 92, 17, C.white, 900, 'left', 235);
@@ -223,12 +228,17 @@ async function renderMemberWelcomeCard({ user = null, guild = null } = {}) {
   const avatar = await loadSafeImage(avatarUrl);
   drawCircleImage(ctx, avatar, 84, 194, 520, '#55DDF5', 7);
   const logo = await loadTemplate('dos-community-logo.png');
-  drawBrandLogo(ctx, logo, 1514, 417, 168, '#55DDF5');
+  // The small logo aperture is about 202px across. Overscan the supplied
+  // circular logo slightly under an exact circular mask so its outer ring
+  // fills the whole opening instead of floating with a dark margin.
+  drawCircleImage(ctx, logo, 1413, 316, 202, '#55DDF5', 1.2, 1.05);
 
   // Owner-requested fixed brand lockup: editable member copy remains outside
   // the artwork, while this central identity text is part of the image.
   drawText(ctx, 'Welcome To', 1010, 394, 54, '#80E9FF', 900, 'center', 560);
-  drawText(ctx, '『DOS』', 1010, 510, 104, '#F5FBFF', 900, 'center', 560);
+  // Use plain DOS: some Canvas font builds do not contain ornate brackets
+  // and render them as empty square glyphs.
+  drawText(ctx, 'DOS', 1010, 510, 104, '#F5FBFF', 900, 'center', 560);
   ctx.save();
   ctx.strokeStyle = 'rgba(85,221,245,0.9)'; ctx.lineWidth = 4;
   ctx.shadowColor = '#55DDF5'; ctx.shadowBlur = 14;
