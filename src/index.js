@@ -6,7 +6,7 @@ const {
 } = require('discord.js');
 const database = require('./database');
 const { createWalletImage } = require('./wallet');
-const { renderTopLeaderboard, renderLevelUpBanner } = require('./render');
+const { renderTopLeaderboard, renderLevelUpBanner, renderAdminSection } = require('./render');
 const { shopPayload, handleShopInteraction, handleShopModal, processRoomExpirations, colorPickerPayload } = require('./shop');
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
@@ -82,7 +82,12 @@ function helpEmbed() {
     'للإدارة: .اضافة_عملات @عضو 500 أو .اضافة_xp @عضو 500 كتابة',
     'للإدارة: .تعيين_قناة متجر #قناة أو .تعيين_قناة لفل #قناة',
     'للإدارة: .رتبة_مستوى كتابة 10 @رتبة أو .رتبة_مستوى صوت 10 @رتبة'
-  ].join('\n')).setFooter({ text: '7 XP لكل رسالة • 9 XP لكل دقيقة صوت • 250 XP = 1 DOS Coin (قابلة للتعديل من الإدارة)' });
+  ].join('\n')).setFooter({ text: '7 XP لكل رسالة • 9 XP لكل دقيقة صوت • 250 XP = 1 DOS Coin (قابلة للتعديل من الإدارة)' })
+    .setImage('attachment://dos-commands.png');
+}
+async function helpPayload() {
+  const image = renderAdminSection({ title: 'DOS COMMANDS', subtitle: 'Current bot commands', emblem: 'DOS' });
+  return { embeds: [helpEmbed()], files: [new AttachmentBuilder(image, { name: 'dos-commands.png' })] };
 }
 async function walletPayload(guild, user) {
   const guildId = guild.id;
@@ -194,7 +199,7 @@ async function handleCommand(message) {
   const guildId = message.guild.id;
   const userId = message.author.id;
   try {
-    if (['مساعدة','اوامر','أوامر'].includes(command)) return message.reply({ embeds:[helpEmbed()] });
+    if (['مساعدة','اوامر','أوامر'].includes(command)) return message.reply(await helpPayload());
     if (command === 'محفظتي') {
       if (!database.featureEnabled(guildId,'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
       const user = message.mentions.users.first() || message.author;

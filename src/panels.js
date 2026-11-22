@@ -52,7 +52,7 @@ function content(guildId, key) {
 }
 function makeContentEmbed(guildId, key) {
   const item = content(guildId, key);
-  return new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(item.body).setFooter({ text: 'DOS COMMUNITY • Silver × Cyan × Gold' });
+  return new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(item.body).setFooter({ text: 'DOS COMMUNITY • Silver × Cyan' });
 }
 async function buildMainPanel(guild, guildId) {
   const main = content(guildId, 'main');
@@ -70,7 +70,13 @@ async function buildMainPanel(guild, guildId) {
     new ButtonBuilder().setCustomId('public:news').setLabel('New').setEmoji('✨').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('public:arena').setLabel('Arena').setEmoji('🎮').setStyle(ButtonStyle.Secondary)
   );
-  return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
+  const panelEmbed = new EmbedBuilder()
+    .setColor(CYAN)
+    .setTitle(main.title || `مرحباً بك في ${guild.name}`)
+    .setDescription(String(main.body || '').slice(0, 4096))
+    .setImage('attachment://dos-main-panel.png')
+    .setFooter({ text: signature || `تحيات إدارة ${guild.name}` });
+  return { embeds: [panelEmbed], files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
 }
 
 async function publishMainPanel(guild, channel) {
@@ -114,13 +120,17 @@ async function handlePublicPanelInteraction(interaction) {
         })
       : await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • ' + action.toUpperCase() });
     const systemCurve = action === 'system' ? database.curveForGuild(interaction.guildId) : null;
+    const systemRates = action === 'system'
+      ? `\n\n**معدلات الخبرة الحالية:** ${database.getConfig(interaction.guildId, 'message_xp', '7')} XP لكل رسالة، و${database.getConfig(interaction.guildId, 'voice_xp', '9')} XP لكل دقيقة صوت. كل ${database.getConfig(interaction.guildId, 'xp_per_coin', '250')} XP تساوي 1 DOS Coin.`
+      : '';
     const systemDetails = systemCurve
       ? `\n\n**متطلبات المستويات:** ${systemCurve.firstLevels.join('، ')} XP لأول 6 مستويات. يبدأ المستوى 7 بـ ${systemCurve.level7Base} XP، ثم تزداد المتطلبات تدريجياً بمقدار ${systemCurve.level7Increment} XP أساسياً مع زيادة إضافية قدرها ${systemCurve.growthStep} XP في كل مستوى. يستمر التصاعد بعد المستوى 100.`
       : '';
-    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription((String(item.body || '') + systemDetails).slice(0, 4096));
+    const imageName = 'dos-' + action + '.png';
+    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription((String(item.body || '') + systemRates + systemDetails).slice(0, 4096)).setImage('attachment://' + imageName);
     return interaction.reply({
       embeds: [contentEmbed],
-      files: [new AttachmentBuilder(image, { name: 'dos-' + action + '.png' })],
+      files: [new AttachmentBuilder(image, { name: imageName })],
       flags: MessageFlags.Ephemeral
     });
   }
@@ -136,7 +146,7 @@ async function handlePublicPanelInteraction(interaction) {
       .addOptions(roles.map((row) => ({ label: row.role_name.slice(0, 100), value: row.role_id, default: current.has(row.role_id) })));
     const item = content(interaction.guildId, 'notifications');
     const image = await renderPanelPage({ guild: interaction.guild, title: item.title, body: item.body, subtitle: 'DOS COMMUNITY • NOTIFICATIONS' });
-    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(String(item.body || '').slice(0, 4096));
+    const contentEmbed = new EmbedBuilder().setColor(CYAN).setTitle(item.title).setDescription(String(item.body || '').slice(0, 4096)).setImage('attachment://dos-notifications.png');
     return interaction.reply({ embeds: [contentEmbed], files: [new AttachmentBuilder(image, { name: 'dos-notifications.png' })], components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
   }
   if (scope === 'notify' && action === 'select' && interaction.isStringSelectMenu()) {

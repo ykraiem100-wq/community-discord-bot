@@ -9,8 +9,8 @@ const TEMPLATE_DIR = path.join(ROOT, 'assets', 'templates');
 const FONT_DIR = path.join(ROOT, 'assets', 'fonts');
 const C = Object.freeze({
   ink: '#06111C', ink2: '#0A1A29', white: '#F7FAFD', silver: '#DCE6F0',
-  muted: '#B9C8D6', cyan: '#39D8FF', cyanBright: '#7CEBFF', gold: '#FFD45F',
-  green: '#69DEB6', red: '#FF7888'
+  muted: '#B9C8D6', cyan: '#55DDF5', cyanBright: '#A7F3FF', gold: '#63DDF5',
+  green: '#69DEB6', red: '#63DDF5'
 });
 const FONT = 'DOSArabic, DOSLatin, Arial, sans-serif';
 
@@ -221,7 +221,7 @@ async function renderTopLeaderboard({ guild = null, entries = [], period = 'all'
   const avatarSlots = [
     { x: 78, y: 87, size: 54, index: 1, tint: '#C7D1DB' },
     { x: 224, y: 68, size: 69, index: 0, tint: C.gold },
-    { x: 380, y: 87, size: 54, index: 2, tint: '#C48C63' }
+    { x: 380, y: 87, size: 54, index: 2, tint: '#76DFF4' }
   ];
   for (const slot of avatarSlots) {
     const entry = rows[slot.index];
@@ -232,7 +232,7 @@ async function renderTopLeaderboard({ guild = null, entries = [], period = 'all'
   const podium = [
     { index: 1, x: 49, w: 130, color: C.silver },
     { index: 0, x: 188, w: 137, color: C.gold },
-    { index: 2, x: 337, w: 126, color: '#D49B6D' }
+    { index: 2, x: 337, w: 126, color: '#65C9E7' }
   ];
   for (const slot of podium) {
     const entry = rows[slot.index];
@@ -302,66 +302,47 @@ async function renderShopGrid(items = []) {
   return canvas.toBuffer('image/png');
 }
 
-// Welcome panel modeled on the supplied Discord welcome-message reference.
-// The guild icon/name and owner signature are dynamic; editable copy comes from the admin panel.
-async function renderMainPanel({ guild = null, title = '', body = '', signature = '' } = {}) {
-  const canvas = createCanvas(1200, 900);
+// Clean welcome artwork. All readable copy is sent as a Discord embed (not painted
+// into the PNG), avoiding Arabic glyph shaping/overprint artifacts on some hosts.
+async function renderMainPanel({ guild = null } = {}) {
+  const canvas = createCanvas(1200, 560);
   const ctx = canvas.getContext('2d');
-  const bg = ctx.createLinearGradient(0, 0, 1200, 900);
-  bg.addColorStop(0, '#303136'); bg.addColorStop(1, '#383A40');
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 900);
-  patch(ctx, 16, 16, 1168, 868, '#37393F', 22, '#4A4C53');
-  patch(ctx, 16, 16, 10, 868, '#D51F32', 8);
+  const bg = ctx.createLinearGradient(0, 0, 1200, 560);
+  bg.addColorStop(0, '#303238'); bg.addColorStop(1, '#383B42');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 560);
+  patch(ctx, 16, 16, 1168, 528, '#373A41', 22, '#59636D');
+  patch(ctx, 16, 16, 10, 528, '#63DDF5', 8);
   const iconUrl = guild && typeof guild.iconURL === 'function'
     ? guild.iconURL({ extension: 'png', size: 512 }) : null;
   const icon = await loadSafeImage(iconUrl);
-  const logoSize = 230, logoX = 600 - logoSize / 2, logoY = 62;
+  const logoSize = 260, logoX = 600 - logoSize / 2, logoY = 92;
+  drawCircleImage(ctx, icon, logoX, logoY, logoSize, '#63DDF5', 7);
   ctx.save();
-  ctx.beginPath(); ctx.arc(600, logoY + logoSize / 2, logoSize / 2 + 5, 0, Math.PI * 2);
-  ctx.strokeStyle = '#D51F32'; ctx.lineWidth = 5; ctx.shadowColor = 'rgba(213,31,50,0.35)'; ctx.shadowBlur = 18; ctx.stroke();
-  ctx.beginPath(); ctx.arc(600, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2); ctx.clip();
-  if (icon) ctx.drawImage(icon, logoX, logoY, logoSize, logoSize);
-  else {
-    const fallback = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize);
-    fallback.addColorStop(0, '#16181D'); fallback.addColorStop(1, '#555861');
-    ctx.fillStyle = fallback; ctx.fillRect(logoX, logoY, logoSize, logoSize);
-    drawText(ctx, 'DOS', 600, logoY + logoSize / 2, 60, C.white, 900, 'center', 170);
-  }
+  ctx.strokeStyle = 'rgba(99,221,245,0.52)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(110, 430); ctx.lineTo(1090, 430); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(190, 478); ctx.lineTo(1010, 478); ctx.stroke();
   ctx.restore();
-  drawText(ctx, truncate(guild && guild.name ? guild.name : 'DOS COMMUNITY', 48), 600, 328, 40, C.white, 900, 'center', 1000);
-  drawText(ctx, title || 'مرحباً بك في مجتمعنا الرسمي', 600, 390, 30, '#F2F2F4', 800, 'center', 1060);
-  ctx.save(); ctx.strokeStyle = '#55575E'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(58, 430); ctx.lineTo(1142, 430); ctx.stroke(); ctx.restore();
-  const lines = wrapLines(ctx, body || '', 1050, 24, 10);
-  const startY = lines.length > 7 ? 475 : 500;
-  lines.forEach((line, index) => drawText(ctx, line, 600, startY + index * 39, 24, '#D9EAF0', 650, 'center', 1050));
-  ctx.save(); ctx.strokeStyle = '#55575E'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(58, 817); ctx.lineTo(1142, 817); ctx.stroke(); ctx.restore();
-  drawText(ctx, signature || 'تحيات إدارة DOS COMMUNITY', 1120, 846, 22, '#BFC1C7', 700, 'right', 960);
   return canvas.toBuffer('image/png');
 }
 
-// Wide shop banner. The medallion is filled with the current Discord server icon at runtime.
-// This keeps the shop branded to the actual guild instead of using a generic mascot.
+// Wide, text-free DOS SHOP banner. The server icon is composited into the cyan crest;
+// the live title and product details are shown as a Discord embed to keep them crisp.
 async function renderShopHeader(guild = null) {
   const source = await loadSafeImage(path.join(TEMPLATE_DIR, 'shop-crest-bg.png'));
   const canvas = createCanvas(1200, 560);
   const ctx = canvas.getContext('2d');
   const bg = ctx.createLinearGradient(0, 0, 1200, 560);
-  bg.addColorStop(0, '#282A2F'); bg.addColorStop(1, '#383A40');
+  bg.addColorStop(0, '#242830'); bg.addColorStop(1, '#373B43');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 560);
   if (source) drawImageContain(ctx, source, 0, 0, 735, 560, 18);
-
   const iconUrl = guild && typeof guild.iconURL === 'function'
     ? guild.iconURL({ extension: 'png', size: 512 }) : null;
   const serverIcon = await loadSafeImage(iconUrl);
-  // The image template has an empty circular crest here; the real server icon is clipped into it.
-  drawCircleImage(ctx, serverIcon, 122, 93, 220, '#E4B94F', 4);
-
-  patch(ctx, 752, 98, 430, 360, 'rgba(38,40,46,0.32)', 24, 'rgba(255,255,255,0.06)');
-  drawText(ctx, 'CREDITS SHOP', 967, 205, 54, '#FFF8E7', 1000, 'center', 405);
-  const serverName = guild && guild.name ? guild.name : 'DOS COMMUNITY';
-  drawText(ctx, serverName, 967, 282, 27, '#E7C26D', 850, 'center', 390);
-  ctx.save(); ctx.strokeStyle = '#CDA64B'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(810, 330); ctx.lineTo(1124, 330); ctx.stroke(); ctx.restore();
-  drawText(ctx, 'COLORS  •  CUSTOM ROLES  •  ITEMS', 967, 382, 17, '#E5E6E9', 800, 'center', 395);
+  // Inner circle of the generated crest, scaled into the 1200x560 banner.
+  drawCircleImage(ctx, serverIcon, 108, 122, 184, '#63DDF5', 5);
+  patch(ctx, 758, 78, 410, 404, 'rgba(27,34,43,0.28)', 24, 'rgba(99,221,245,0.28)');
+  const titleOverlay = await loadTemplate('shop-title-overlay.png');
+  drawImageContain(ctx, titleOverlay, 778, 142, 370, 270, 0);
   return canvas.toBuffer('image/png');
 }
 
@@ -394,55 +375,100 @@ function renderColorWheel() {
   }
   ctx.putImageData(image, 0, 0);
   ctx.beginPath(); ctx.arc(center, center, radius + 2, 0, Math.PI * 2);
-  ctx.strokeStyle = '#E5C36B'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.strokeStyle = '#63DDF5'; ctx.lineWidth = 5; ctx.stroke();
   ctx.beginPath(); ctx.arc(center, center, 28, 0, Math.PI * 2);
   ctx.fillStyle = '#34363B'; ctx.fill(); ctx.strokeStyle = '#F2F2F4'; ctx.lineWidth = 2; ctx.stroke();
   drawText(ctx, 'HEX', center, center, 13, C.white, 900, 'center', 32);
   return canvas.toBuffer('image/png');
 }
 
-// Reusable image header rendered for every admin section, with live section title/description.
-function renderAdminSection({ title = 'إدارة DOS COMMUNITY', subtitle = 'لوحة التحكم', emblem = 'DOS' } = {}) {
-  const canvas = createCanvas(1200, 280);
+function drawAdminGlyph(ctx, emblem = '') {
+  const key = String(emblem || '').toUpperCase();
+  const cx = 150, cy = 150;
+  ctx.save();
+  ctx.strokeStyle = '#8CEFFF'; ctx.fillStyle = 'rgba(99,221,245,0.12)';
+  ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const line = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+  if (key.includes('SHOP')) {
+    ctx.beginPath(); ctx.roundRect(cx-48,cy-24,96,76,12); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy-25,28,Math.PI,0); ctx.stroke();
+    line(cx-22,cy-1,cx-22,cy+15); line(cx+22,cy-1,cx+22,cy+15);
+  } else if (key.includes('ROOM')) {
+    ctx.beginPath(); ctx.moveTo(cx-58,cy-2); ctx.lineTo(cx,cy-52); ctx.lineTo(cx+58,cy-2); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx-40,cy-2,80,58,7); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(cx-10,cy+20,25,36,4); ctx.stroke();
+  } else if (key.includes('CONTENT') || key.includes('PREVIEW') || key.includes('PUBLISH')) {
+    ctx.beginPath(); ctx.moveTo(cx-36,cy-58); ctx.lineTo(cx+20,cy-58); ctx.lineTo(cx+48,cy-30); ctx.lineTo(cx+48,cy+58); ctx.lineTo(cx-36,cy+58); ctx.closePath(); ctx.stroke();
+    line(cx+20,cy-58,cx+20,cy-30); line(cx+20,cy-30,cx+48,cy-30);
+    line(cx-18,cy-4,cx+28,cy-4); line(cx-18,cy+19,cx+28,cy+19);
+  } else if (key.includes('FEATURE')) {
+    for (const [y,on] of [[cy-28,true],[cy+30,false]]) {
+      ctx.beginPath(); ctx.roundRect(cx-62,y-19,124,38,19); ctx.stroke();
+      ctx.beginPath(); ctx.arc(on?cx+22:cx-22,y,13,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    }
+  } else if (key.includes('XP') || key.includes('LEVEL')) {
+    ctx.beginPath(); ctx.moveTo(cx-62,cy+54); ctx.lineTo(cx+62,cy+54); ctx.stroke();
+    ctx.fillRect(cx-52,cy+5,25,49); ctx.fillRect(cx-12,cy-20,25,74); ctx.fillRect(cx+28,cy-52,25,106);
+    line(cx-49,cy-28,cx-4,cy-58); line(cx-4,cy-58,cx+23,cy-39); line(cx+23,cy-39,cx+60,cy-72);
+  } else if (key.includes('MEMBER') || key.includes('ROLE')) {
+    for (const [x,y,r] of [[cx-34,cy-28,19],[cx+34,cy-28,19],[cx,cy-48,22]]) {
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(cx,cy+52,57,Math.PI,0); ctx.stroke();
+  } else if (key.includes('SALE')) {
+    ctx.beginPath(); ctx.moveTo(cx-38,cy-58); ctx.lineTo(cx+38,cy-58); ctx.lineTo(cx+38,cy+58); ctx.lineTo(cx,cy+43); ctx.lineTo(cx-38,cy+58); ctx.closePath(); ctx.stroke();
+    line(cx-20,cy-22,cx+20,cy-22); line(cx-20,cy+2,cx+20,cy+2); line(cx-20,cy+26,cx+10,cy+26);
+  } else {
+    // Terminal/command icon for the help image and general administration page.
+    ctx.beginPath(); ctx.roundRect(cx-66,cy-48,132,96,12); ctx.stroke();
+    line(cx-34,cy-13,cx-12,cy); line(cx-12,cy,cx-34,cy+14);
+    line(cx+2,cy+17,cx+34,cy+17);
+  }
+  ctx.restore();
+}
+
+// Reusable cyan/silver artwork for every real admin command page. Each section has
+// its own vector icon; Arabic labels and actual actions stay in the Discord embed.
+function renderAdminSection({ title = '', subtitle = '', emblem = '' } = {}) {
+  const canvas = createCanvas(1200, 300);
   const ctx = canvas.getContext('2d');
-  const bg = ctx.createLinearGradient(0, 0, 1200, 280);
-  bg.addColorStop(0, '#292B31'); bg.addColorStop(1, '#3A3C43');
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 280);
-  patch(ctx, 10, 10, 1180, 260, '#37393F', 22, '#50525A');
-  patch(ctx, 10, 10, 9, 260, '#DDB84E', 5);
-  ctx.save(); ctx.beginPath(); ctx.arc(145, 140, 82, 0, Math.PI * 2);
-  const halo = ctx.createLinearGradient(70, 60, 220, 220);
-  halo.addColorStop(0, '#EACB76'); halo.addColorStop(1, '#6F8F9F');
-  ctx.fillStyle = '#25272D'; ctx.fill(); ctx.strokeStyle = halo; ctx.lineWidth = 5; ctx.stroke(); ctx.restore();
-  drawText(ctx, String(emblem).slice(0, 10), 145, 140, 32, '#EBD38D', 900, 'center', 136);
-  drawText(ctx, 'DOS COMMUNITY  •  CONTROL PANEL', 280, 85, 18, '#DCC27B', 850, 'left', 850);
-  drawText(ctx, title, 280, 143, 43, '#F5F5F6', 900, 'left', 850);
-  drawText(ctx, subtitle, 280, 206, 22, '#C8CBD1', 650, 'left', 850);
+  const bg = ctx.createLinearGradient(0, 0, 1200, 300);
+  bg.addColorStop(0, '#252B33'); bg.addColorStop(1, '#3A3E46');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 300);
+  patch(ctx, 12, 12, 1176, 276, '#353A43', 22, 'rgba(99,221,245,0.52)');
+  patch(ctx, 12, 12, 10, 276, '#63DDF5', 6);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(150, 150, 95, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(13,30,42,0.55)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(99,221,245,0.65)'; ctx.lineWidth = 4; ctx.stroke();
+  ctx.restore();
+  drawAdminGlyph(ctx, emblem || title);
+  ctx.save();
+  for (let i = 0; i < 3; i += 1) {
+    const y = 92 + i * 62;
+    ctx.beginPath(); ctx.roundRect(330, y, i === 0 ? 710 : i === 1 ? 590 : 460, 16, 8);
+    ctx.fillStyle = i === 0 ? 'rgba(221,243,250,0.24)' : 'rgba(99,221,245,0.16)'; ctx.fill();
+  }
+  ctx.beginPath(); ctx.roundRect(330, 255, 145, 7, 3); ctx.fillStyle = 'rgba(99,221,245,0.8)'; ctx.fill();
+  ctx.restore();
   return canvas.toBuffer('image/png');
 }
 
 // A dedicated content card cropped from the chosen rules-message design.
-async function renderPanelPage({ guild = null, title = 'قوانين السيرفر', body = '', subtitle = '' } = {}) {
+async function renderPanelPage({ guild = null, title = '', body = '', subtitle = '' } = {}) {
+  // Keep this as a clean, high-resolution decorative rules card. Arabic titles/body
+  // are rendered by Discord itself rather than the host canvas to prevent broken glyphs.
   const bg = await loadTemplate('content-panel-base.png');
-  const { canvas, ctx } = scaleCanvas(bg, 2.35);
-  drawText(ctx, truncate(title || 'DOS COMMUNITY', 38), 204, 47, 22, C.white, 900, 'center', 280);
-  const lines = wrapLines(ctx, body, 395, 13, 5);
-  const startY = lines.length >= 5 ? 105 : lines.length === 4 ? 111 : lines.length === 3 ? 120 : lines.length === 2 ? 133 : 145;
-  lines.forEach((line, i) => drawText(ctx, line, bg.width / 2, startY + i * 14, 13, C.silver, 650, 'center', 395));
+  const { canvas } = scaleCanvas(bg, 2.35);
   return canvas.toBuffer('image/png');
 }
 
 // Exact level-system infographic; only the three configurable rate values are refreshed.
 async function renderLevelSystemPage({ messageXp = 7, voiceXp = 9, xpPerCoin = 250 } = {}) {
-  const bg = await loadTemplate('level-system-base.png');
-  const { canvas, ctx } = scaleCanvas(bg, 2.2);
-  patch(ctx, 66, 226, 205, 28, 'rgba(2,11,20,0.94)', 4);
-  patch(ctx, 66, 268, 205, 28, 'rgba(2,11,20,0.94)', 4);
-  patch(ctx, 445, 241, 220, 50, 'rgba(2,11,20,0.94)', 4);
-  drawText(ctx, `${Number(messageXp)} XP لكل رسالة`, 166, 240, 15, C.white, 800, 'center', 195);
-  drawText(ctx, `${Number(voiceXp)} XP لكل دقيقة في الصوت`, 166, 282, 14, C.white, 800, 'center', 195);
-  drawText(ctx, `كل ${Number(xpPerCoin)} XP تساوي`, 555, 253, 14, C.white, 800, 'center', 205);
-  drawText(ctx, '1 DOS Coin', 555, 277, 19, C.cyanBright, 900, 'center', 205);
+  // Dynamic rate values and progression are written in the Discord embed. This clean
+  // cyan/silver image avoids rasterizing Arabic labels into broken glyphs.
+  const bg = await loadTemplate('content-panel-base.png');
+  const { canvas } = scaleCanvas(bg, 2.35);
   return canvas.toBuffer('image/png');
 }
 
@@ -467,12 +493,33 @@ function formatUptime(seconds) {
   return `${minutes} دقيقة`;
 }
 
-// Full reference dashboard is retained as the canvas; the live metrics and section states are refreshed.
-async function renderAdminDashboard() {
-  // The original admin screen is a complete approved UI mockup. Keep it pixel-identical;
-  // current statistics are sent in a Discord embed beside the image, not painted over it.
-  const bg = await loadTemplate('admin-dashboard-base.png');
-  const { canvas } = scaleCanvas(bg, 1);
+// Live admin dashboard artwork contains no mock controls. The actual sections and
+// commands are listed in the Discord embed/menu, so no unimplemented feature appears.
+async function renderAdminDashboard({ guild = null } = {}) {
+  const canvas = createCanvas(1200, 430);
+  const ctx = canvas.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 1200, 430);
+  bg.addColorStop(0, '#252B33'); bg.addColorStop(1, '#3B4048');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 430);
+  patch(ctx, 14, 14, 1172, 402, '#353A43', 26, 'rgba(99,221,245,0.58)');
+  patch(ctx, 14, 14, 11, 402, '#63DDF5', 7);
+  const iconUrl = guild && typeof guild.iconURL === 'function'
+    ? guild.iconURL({ extension: 'png', size: 512 }) : null;
+  const icon = await loadSafeImage(iconUrl);
+  drawCircleImage(ctx, icon, 86, 92, 245, '#63DDF5', 7);
+  ctx.save();
+  for (let i = 0; i < 4; i += 1) {
+    const x = 410 + (i % 2) * 350;
+    const y = 72 + Math.floor(i / 2) * 170;
+    patch(ctx, x, y, 300, 126, 'rgba(10,26,39,0.46)', 18, 'rgba(99,221,245,0.42)');
+    ctx.beginPath(); ctx.arc(x + 54, y + 63, 24, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(167,243,255,0.9)'; ctx.lineWidth = 4; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 100, y + 48); ctx.lineTo(x + 264, y + 48);
+    ctx.strokeStyle = 'rgba(218,235,242,0.58)'; ctx.lineWidth = 7; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 100, y + 78); ctx.lineTo(x + 220, y + 78);
+    ctx.strokeStyle = 'rgba(99,221,245,0.56)'; ctx.lineWidth = 5; ctx.stroke();
+  }
+  ctx.restore();
   return canvas.toBuffer('image/png');
 }
 

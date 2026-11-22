@@ -24,7 +24,7 @@ function createWalletEmbed(member, user, guildId) {
       { name: `📝 المستوى الكتابي ${text.level}`, value: `${progressBar(text.percent)}\n${text.xp}/${text.needed} XP • ${difficultyFor(text.level)}`, inline: false },
       { name: `🎙️ المستوى الصوتي ${voice.level}`, value: `${progressBar(voice.percent)}\n${voice.xp}/${voice.needed} XP • ${difficultyFor(voice.level)}`, inline: false },
       { name: '⏱️ وقت الفويس', value: '**' + hours + '** ساعة و **' + minutes + '** دقيقة', inline: true }
-    ).setFooter({ text: 'DOS COMMUNITY • Silver × Cyan × Gold' }).setTimestamp();
+    ).setFooter({ text: 'DOS COMMUNITY • Silver × Cyan' }).setTimestamp();
 }
 async function createWalletImage(member, user, guildId, guild, positions = {}) {
   const curve = guildId ? database.curveForGuild(guildId) : undefined;

@@ -31,7 +31,8 @@ function adminEmbed(title, description) {
 }
 function withSectionImage(payload, title, subtitle, emblem) {
   const image = renderAdminSection({ title, subtitle, emblem });
-  return { ...payload, files: [new AttachmentBuilder(image, { name: 'dos-admin-section.png' })], attachments: [] };
+  const embeds = (payload.embeds || []).map((embed, index) => index === 0 ? embed.setImage('attachment://dos-admin-section.png') : embed);
+  return { ...payload, embeds, files: [new AttachmentBuilder(image, { name: 'dos-admin-section.png' })], attachments: [] };
 }
 function formatUptime(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -64,8 +65,8 @@ async function homePayload(guildOrId) {
   stats.uptimeSeconds = process.uptime();
   stats.pendingOrders = database.pendingProductPurchases(guildId).length;
   stats.productCount = database.products(guildId, true).length;
-  const image = await renderAdminDashboard({ stats });
-  const statsEmbed = adminEmbed('الإحصائيات الحالية • DOS COMMUNITY', 'هذه الأرقام حية من قاعدة بيانات البوت والسيرفر، بينما الصورة أعلاه تبقى مطابقة للتصميم الأصلي.');
+  const image = await renderAdminDashboard({ guild });
+  const statsEmbed = adminEmbed('DOS CONTROL PANEL • لوحة التحكم', 'اختر القسم من القائمة لإدارة الأنظمة والأوامر الموجودة فعلياً.\n\n**أوامر الإدارة:** `/admin-panel` • `/add-coins` • `/add-xp` • `/reset-member`\n**الاختصارات:** `.اضافة_عملات` • `.اضافة_xp` • `.تعيين_قناة` • `.رتبة_مستوى`').setImage('attachment://dos-admin-dashboard.png');
   statsEmbed.addFields(
     { name: 'الأعضاء', value: Number(stats.serverMembers || 0).toLocaleString('en-US'), inline: true },
     { name: 'إجمالي DOS Coin', value: Number(stats.coins || 0).toLocaleString('en-US'), inline: true },
@@ -105,7 +106,7 @@ async function shopAdminPayload(guildId) {
       : `${Number(product.price || 0).toLocaleString('en-US')} DOS Coin`;
     return `**#${product.id} ${product.name}** — ${price} — ${product.active ? '🟢 مفعّل' : '🔴 متوقف'}`;
   });
-  const productsEmbed = adminEmbed('قائمة المنتجات الفعلية', 'أضف منتجاتك وأسعارك من هنا. عنصر Colors موجود افتراضياً ومتوقف حتى تحدد سعره ثم تفعّله.\n\n' + (summary.join('\n') || 'لا توجد منتجات مضافة حالياً.'));
+  const productsEmbed = adminEmbed('قائمة المنتجات الفعلية', 'أضف منتجاتك وأسعارك من هنا. عنصر Colors موجود افتراضياً ومتوقف حتى تحدد سعره ثم تفعّله.\n\n' + (summary.join('\n') || 'لا توجد منتجات مضافة حالياً.')).setImage('attachment://dos-shop-admin.png');
   return { files: [new AttachmentBuilder(image, { name: 'dos-shop-admin.png' })], embeds: [productsEmbed], components: rows };
 }
 function shopSettingsPayload(guildId) {
