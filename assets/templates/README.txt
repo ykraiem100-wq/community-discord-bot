@@ -15,3 +15,6 @@ admin-shop-base.png         legacy admin reference; current sections show real p
 shop-crest-bg.png           active: full-width cyan/silver crest and treasure background; large DOS wordmark is placed in the center medallion
 
 The source screenshots and crops are preserved in assets/design-references/. Do not remove the active templates or rename them. The archive does not contain production SQLite data or .env secrets.
+
+
+dos-community-logo.png: Owner-provided DOS COMMUNITY logo. Used in the welcome image, public rules/content image, and CREDITS SHOP crest with a cyan/silver rim.
