@@ -4,10 +4,11 @@ DOS COMMUNITY — رفع حزمة DOS COMMUNITY المحدّثة على Nowhost
 1) فك ضغط ملف community-discord-bot-events-tasks-update.zip.
 2) افتح مجلد community-discord-bot-main الموجود داخل الملف المضغوط.
 3) ارفع محتويات هذا المجلد إلى جذر مشروعك في Nowhost؛ يجب أن يكون package.json بجانب مجلدي src و assets.
-4) اختر Node.js 20.x.
-5) أمر التثبيت: npm install
-6) أمر التشغيل: npm start
-7) احتفظ بمتغير DATA_DIR الحالي الذي يشير إلى التخزين الدائم، مثلاً /app/data.
+4) تأكد أن مجلد assets/templates مرفوع بالكامل بجانب src، وبالأخص dos-community-logo-circle.png و dos-community-logo.png. إذا غاب ملف الدائرة سيستخدم البوت الشعار الأصلي تلقائياً كبديل.
+5) اختر Node.js 20.x.
+6) أمر التثبيت: npm install
+7) أمر التشغيل: npm start
+8) احتفظ بمتغير DATA_DIR الحالي الذي يشير إلى التخزين الدائم، مثلاً /app/data.
 
 إعداد لوحة الإدارة:
 - استخدم /admin-panel لفتح لوحة التحكم. تظهر الرسالة علناً في القناة، لكن الأزرار والعمليات الإدارية لا تعمل إلا للأعضاء المخولين.
