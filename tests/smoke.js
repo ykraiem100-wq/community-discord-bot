@@ -30,6 +30,12 @@ try {
   db.setSetting(guild, 'level_up_channel_id', 'level-room');
   assert.equal(db.settings(guild).shop_channel_id, 'shop');
   assert.equal(db.settings(guild).level_up_channel_id, 'level-room');
+  const colorsProductId = db.ensureDefaultColorProduct(guild);
+  assert.ok(colorsProductId > 0);
+  assert.equal(db.ensureDefaultColorProduct(guild), colorsProductId, 'default Colors product is created only once');
+  const colorsProduct = db.products(guild, false).find((item) => item.id === colorsProductId);
+  assert.equal(colorsProduct.product_type, 'color');
+  assert.equal(colorsProduct.active, 0, 'Colors must remain disabled until an administrator configures its price');
   const adminCoins = db.addCoins(guild, user, 75);
   assert.equal(adminCoins.coins, 76);
   db.setRole(guild, 'text', 5, 'role');

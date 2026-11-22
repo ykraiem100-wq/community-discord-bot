@@ -4,13 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   renderWallet, renderTopLeaderboard, renderShopGrid, renderPanelPage,
-  renderMainPanel, renderLevelSystemPage, renderLevelUpBanner, renderAdminDashboard, renderAdminShop, TEMPLATE_DIR
+  renderMainPanel, renderLevelSystemPage, renderLevelUpBanner, renderAdminDashboard, renderAdminShop,
+  renderShopHeader, renderColorWheel, renderAdminSection, TEMPLATE_DIR
 } = require('../src/render');
 
 async function main() {
   for (const filename of [
     'wallet-base.png', 'leaderboard-base.png', 'shop-base.png', 'main-panel-base.png',
-    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png'
+    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png', 'shop-mascot.png'
   ]) {
     assert.ok(fs.existsSync(path.join(TEMPLATE_DIR, filename)), `missing current template ${filename}`);
   }
@@ -26,13 +27,16 @@ async function main() {
     await renderLevelSystemPage({ messageXp: 7, voiceXp: 9, xpPerCoin: 250 }),
     await renderLevelUpBanner({ level: 42 }),
     await renderAdminDashboard({ stats: { members: 25, messages: 1500, coins: 1200, voice_seconds: 3600 }, features: { shop: true } }),
-    await renderAdminShop([{ name: 'لون خاص', price: 200, currency: 'coin', active: true }])
+    await renderAdminShop([{ name: 'لون خاص', price: 200, currency: 'coin', active: true }]),
+    await renderShopHeader(),
+    renderColorWheel(),
+    renderAdminSection({ title: 'إدارة العملات', subtitle: 'اختبار صورة الأمر', emblem: 'XP' })
   ];
   for (const [index, image] of outputs.entries()) {
     assert.ok(Buffer.isBuffer(image), `render ${index} must return a Buffer`);
     assert.ok(image.length > 1000, `render ${index} must not be empty`);
     assert.equal(image.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', `render ${index} must be a valid PNG`);
   }
-  console.log('DOS metallic-cyan PNG rendering tests passed.');
+  console.log('DOS panel, shop, color-wheel and admin PNG rendering tests passed.');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });
