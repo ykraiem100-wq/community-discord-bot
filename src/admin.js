@@ -7,7 +7,7 @@ const {
 const database = require('./database');
 const { CYAN, DEFAULT_CONTENT, makeContentEmbed, publishMainPanel } = require('./panels');
 const { deliverProduct, publishShop, refreshPublishedShop } = require('./shop');
-const { renderAdminDashboard, renderAdminShop } = require('./render');
+const { renderAdminDashboard, renderAdminSection } = require('./render');
 
 const FEATURES = [
   ['economy', 'العملات والمحفظة'], ['levels', 'المستويات وXP'], ['shop', 'المتجر'],
@@ -16,7 +16,8 @@ const FEATURES = [
 ];
 const CONTENT_KEYS = [
   ['main', 'اللوحة الرئيسية'], ['rules', 'قوانين السيرفر'], ['info', 'معلومات السيرفر'],
-  ['notifications', 'رتب التفاعل'], ['system', 'نظام السيرفر'], ['events', 'الفعاليات']
+  ['notifications', 'رتب التفاعل'], ['system', 'نظام السيرفر'], ['events', 'الفعاليات'],
+  ['social', 'منصات التواصل'], ['apply', 'التقديم'], ['news', 'آخر التحديثات']
 ];
 
 function isAdmin(member, userId, permissionBits) {
@@ -27,6 +28,10 @@ function isAdmin(member, userId, permissionBits) {
 }
 function adminEmbed(title, description) {
   return new EmbedBuilder().setColor(CYAN).setTitle(title).setDescription(description).setFooter({ text: 'DOS CONTROL PANEL • الإدارة فقط' });
+}
+function withSectionImage(payload, title, subtitle, emblem) {
+  const image = renderAdminSection({ title, subtitle, emblem });
+  return { ...payload, files: [new AttachmentBuilder(image, { name: 'dos-admin-section.png' })], attachments: [] };
 }
 function formatUptime(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -76,8 +81,9 @@ async function homePayload(guildOrId) {
   };
 }
 async function shopAdminPayload(guildId) {
+  database.ensureDefaultColorProduct(guildId);
   const products = database.products(guildId, false);
-  const image = await renderAdminShop(products);
+  const image = renderAdminSection({ title: 'إدارة متجر CREDITS SHOP', subtitle: 'إضافة المنتجات وتعديل أسعارها وتفعيلها ومراجعة الطلبات', emblem: 'SHOP' });
   const rows = [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('admin:shop:add').setLabel('إضافة منتج').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('admin:shop:pending').setLabel('طلبات معلقة').setEmoji('🧾').setStyle(ButtonStyle.Primary),
@@ -99,26 +105,25 @@ async function shopAdminPayload(guildId) {
       : `${Number(product.price || 0).toLocaleString('en-US')} DOS Coin`;
     return `**#${product.id} ${product.name}** — ${price} — ${product.active ? '🟢 مفعّل' : '🔴 متوقف'}`;
   });
-  const productsEmbed = adminEmbed('قائمة المنتجات الفعلية', 'البيانات أدناه من قاعدة بيانات المتجر، أما الصورة أعلاه فهي شاشة التصميم الأصلية.\n\n' + (summary.join('\n') || 'لا توجد منتجات مضافة حالياً.'));
+  const productsEmbed = adminEmbed('قائمة المنتجات الفعلية', 'أضف منتجاتك وأسعارك من هنا. عنصر Colors موجود افتراضياً ومتوقف حتى تحدد سعره ثم تفعّله.\n\n' + (summary.join('\n') || 'لا توجد منتجات مضافة حالياً.'));
   return { files: [new AttachmentBuilder(image, { name: 'dos-shop-admin.png' })], embeds: [productsEmbed], components: rows };
 }
 function shopSettingsPayload(guildId) {
   const settings = database.settings(guildId);
   const channelText = settings.shop_channel_id ? `<#${settings.shop_channel_id}>` : 'غير محددة';
   const categoryText = settings.shop_category_id ? `<#${settings.shop_category_id}>` : 'غير محدد (ستُنشأ الغرف دون تصنيف)';
-  return { embeds: [adminEmbed('⚙️ إعداد قنوات المتجر', `**قناة عرض المتجر:** ${channelText}\n**تصنيف الغرف الخاصة:** ${categoryText}\n\nاختر القناة والتصنيف؛ تبقى هذه الصفحة مفتوحة حتى تنتهي من الإعداد.`)], components: [
+  return withSectionImage({ embeds: [adminEmbed('⚙️ إعداد قنوات المتجر', `**قناة عرض المتجر:** ${channelText}\n**تصنيف الغرف الخاصة:** ${categoryText}\n\nاختر القناة والتصنيف؛ تبقى هذه الصفحة مفتوحة حتى تنتهي من الإعداد.`)], components: [
     new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:set-shop-channel').setPlaceholder('اختر قناة عرض المتجر').setChannelTypes(ChannelType.GuildText)),
     new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:set-room-category').setPlaceholder('اختر تصنيف الغرف الخاصة').setChannelTypes(ChannelType.GuildCategory)),
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:back').setLabel('رجوع للمتجر').setStyle(ButtonStyle.Secondary))
-  ] };
+  ] }, 'إعداد قنوات المتجر', 'اختر قناة عرض المتجر وتصنيف الغرف الخاصة', 'SHOP');
 }
-
 function contentAdminPayload() {
   const editMenu = new StringSelectMenuBuilder().setCustomId('admin:content:choose').setPlaceholder('اختر رسالة لتعديلها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
   const previewMenu = new StringSelectMenuBuilder().setCustomId('admin:content:preview').setPlaceholder('معاينة رسالة قبل اعتمادها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
-  return { embeds: [adminEmbed('📝 إدارة اللوحات والرسائل', 'اختر الرسالة التي تريد تعديلها. تستطيع تغيير العنوان والنص كاملاً، ثم حفظها؛ وسيظهر التحديث عند ضغط الأعضاء على الزر.\n\nاستخدم القائمة الثانية لمعاينة النص المحفوظ، ثم انشر أو حدّث اللوحة الرئيسية عند تغيير عنوانها أو وصفها.')], components: [new ActionRowBuilder().addComponents(editMenu), new ActionRowBuilder().addComponents(previewMenu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة الرئيسية').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] };
+  return withSectionImage({ embeds: [adminEmbed('📝 إدارة اللوحات والرسائل', 'اختر الرسالة التي تريد تعديلها. تستطيع تغيير العنوان والنص كاملاً، ثم حفظها؛ وسيظهر التحديث عند ضغط الأعضاء على الزر.\n\nتتضمن الرسائل: الترحيب، القوانين، المعلومات، الرتب، منصات التواصل، التقديم، وآخر التحديثات.')], components: [new ActionRowBuilder().addComponents(editMenu), new ActionRowBuilder().addComponents(previewMenu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة الرئيسية').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] }, 'اللوحات والرسائل', 'تعديل رسائل القوانين والترحيب والمعلومات والأزرار', 'CONTENT');
 }
 function featuresPayload(guildId) {
   const rows = [];
@@ -131,63 +136,64 @@ function featuresPayload(guildId) {
     rows.push(row);
   }
   rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return { embeds: [adminEmbed('⏯️ تشغيل وإيقاف الأنظمة', 'كل زر يتحكم بنظام مستقل. إيقاف المتجر لا يوقف XP أو المحفظة، وإيقاف الفعاليات لا يؤثر على بقية الأنظمة.')], components: rows };
+  return withSectionImage({ embeds: [adminEmbed('⏯️ تشغيل وإيقاف الأنظمة', 'كل زر يتحكم بنظام مستقل. إيقاف المتجر لا يوقف XP أو المحفظة، وإيقاف الفعاليات لا يؤثر على بقية الأنظمة.')], components: rows }, 'تشغيل وإيقاف الأنظمة', 'تحكم بكل ميزة بشكل مستقل دون تعطيل بقية البوت', 'FEATURES');
 }
 function economyPayload(guildId) {
+  const curve = database.curveForGuild(guildId);
   const values = {
     message_xp: database.getConfig(guildId,'message_xp','7'),
     voice_xp: database.getConfig(guildId,'voice_xp','9'),
     xp_per_coin: database.getConfig(guildId,'xp_per_coin','250'),
-    firstLevels: database.curveForGuild(guildId).firstLevels.join(', '),
-    level7Base: database.curveForGuild(guildId).level7Base,
-    level7Increment: database.curveForGuild(guildId).level7Increment,
-    growthStep: database.curveForGuild(guildId).growthStep
+    firstLevels: curve.firstLevels.join(', '), level7Base: curve.level7Base,
+    level7Increment: curve.level7Increment, growthStep: curve.growthStep
   };
   const settings = database.settings(guildId);
   const levelChannel = settings.level_up_channel_id ? `<#${settings.level_up_channel_id}>` : 'غير محددة (سيستخدم البوت قناة الرسالة التي رفعت المستوى)';
   const embed = adminEmbed('📈 العملات والمستويات', `**الرسائل:** ${values.message_xp} XP\n**كل دقيقة فويس:** ${values.voice_xp} XP\n**التحويل:** كل ${values.xp_per_coin} XP = 1 DOS Coin\n\n**أول 6 مستويات:** ${values.firstLevels} XP\n**المستوى 7:** ${values.level7Base} XP\n**بعد ذلك:** تزيد المتطلبات ${values.level7Increment} XP أساسياً لكل مستوى، وتُضاف ${values.growthStep} XP إلى مقدار الزيادة في كل مستوى جديد.\n\n**قناة إشعارات اللفل:** ${levelChannel}`);
-  return { embeds: [embed], components: [
+  return withSectionImage({ embeds: [embed], components: [
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:economy:rates').setLabel('تعديل XP والعملات').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:economy:curve').setLabel('تعديل صعوبة المستويات').setStyle(ButtonStyle.Primary)),
     new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:set-level-channel').setPlaceholder('اختياري: اختر روم إشعارات رفع المستوى').setChannelTypes(ChannelType.GuildText)),
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:clear-level-channel').setLabel('استخدام قناة اللفل تلقائياً').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
-  ] };
+  ] }, 'العملات والمستويات', 'تعديل معدلات XP ومنحنى المستوى وقناة إشعارات اللفل', 'XP');
 }
 function memberToolsPayload() {
-  return { embeds: [adminEmbed('🛠️ أوامر إدارة الأعضاء', [
+  return withSectionImage({ embeds: [adminEmbed('🛠️ أوامر إدارة الأعضاء', [
     '**إضافة عملات:** `/add-coins member amount`',
     '**إضافة XP:** `/add-xp member amount type` — اختر كتابة أو صوت، وتُحتسب مكافأة DOS Coin حسب معدل التحويل.',
     '**إعادة ضبط:** `/reset-member member` — يعرض تأكيداً قبل تصفير عملات العضو وXP والرسائل ووقت الصوت وسجل TOP الدوري.',
+    '**تحديد القنوات:** `.تعيين_قناة متجر #قناة` أو `.تعيين_قناة لفل #قناة`.',
+    '**رتبة مستوى:** `.رتبة_مستوى كتابة 10 @رتبة` أو `.رتبة_مستوى صوت 10 @رتبة`.',
+    '**فتح هذه اللوحة:** `/admin-panel`.',
     '',
     'الأوامر للإدارة فقط. إعادة الضبط لا تحذف سجل العضو من قاعدة البيانات ولا تؤثر على بقية الأعضاء.'
-  ].join('\n'))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] };
+  ].join('\n'))], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] }, 'أوامر إدارة الأعضاء', 'إضافة العملات والخبرة وإعادة الضبط مع تأكيد', 'MEMBERS');
 }
 function rolesPayload(guildId) {
   const saved = database.interactionRoles(guildId);
   const menu = new RoleSelectMenuBuilder().setCustomId('admin:roles:save').setPlaceholder('اختر رتب الإشعارات التي تريد إتاحتها')
     .setMinValues(0).setMaxValues(10);
-  return { embeds: [adminEmbed('🔔 رتب التفاعل', `الرتب المفعّلة حالياً: ${saved.map((r) => r.role_name).join('، ') || 'لا توجد'}\n\nاختر حتى 10 رتب لإظهارها للأعضاء في زر «رتب التفاعل».`)], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] };
+  return withSectionImage({ embeds: [adminEmbed('🔔 رتب التفاعل', `الرتب المفعّلة حالياً: ${saved.map((r) => r.role_name).join('، ') || 'لا توجد'}\n\nاختر حتى 10 رتب لإظهارها للأعضاء في زر «Roles».`)], components: [new ActionRowBuilder().addComponents(menu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] }, 'رتب التفاعل', 'حدد الرتب التي يستطيع الأعضاء اختيارها من رسالة الترحيب', 'ROLES');
 }
 function levelRolesPayload(guildId) {
   const text = database.roles(guildId,'text');
   const voice = database.roles(guildId,'voice');
   const list = (rows) => rows.map((row) => `المستوى ${row.level}: <@&${row.role_id}>`).join('\n') || 'لا توجد رتب محددة بعد.';
-  return { embeds: [adminEmbed('🏅 رتب المستويات', `**رتب الكتابة**\n${list(text)}\n\n**رتب الصوت**\n${list(voice)}\n\nعند بلوغ المستوى المحدد، يمنح البوت العضو الرتبة المناسبة تلقائياً.`)], components: [
+  return withSectionImage({ embeds: [adminEmbed('🏅 رتب المستويات', `**رتب الكتابة**\n${list(text)}\n\n**رتب الصوت**\n${list(voice)}\n\nعند بلوغ المستوى المحدد، يمنح البوت العضو الرتبة المناسبة تلقائياً.`)], components: [
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:level-role:write').setLabel('إضافة رتبة مستوى كتابة').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:level-role:voice').setLabel('إضافة رتبة مستوى صوت').setStyle(ButtonStyle.Primary)),
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
-  ] };
+  ] }, 'رتب المستويات', 'اربط الرتب بمستويات الخبرة الكتابية والصوتية', 'LEVELS');
 }
-
 function roomsPayload(guildId) {
   const rooms = database.activeRooms(guildId);
   const text = rooms.slice(0,20).map((room) => `**#${room.id}** <#${room.channel_id}> — <@${room.user_id}> — ينتهي <t:${room.expires_at}:R>`);
   const components = [];
   if (rooms.length) {
     const menu = new StringSelectMenuBuilder().setCustomId('admin:rooms:select').setPlaceholder('اختر غرفة لإدارتها')
-      .addOptions(rooms.slice(0,25).map((room) => ({ label: `#${room.id} ${room.channel_type === 'voice' ? 'صوتية' : 'كتابية'}`.slice(0,100), value: String(room.id), description: `تنتهي <t:${room.expires_at}:R>` }))); 
+      .addOptions(rooms.slice(0,25).map((room) => ({ label: `#${room.id} ${room.channel_type === 'voice' ? 'صوتية' : 'كتابية'}`.slice(0,100), value: String(room.id), description: `تنتهي <t:${room.expires_at}:R>` })));
     components.push(new ActionRowBuilder().addComponents(menu));
   }
   components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return { embeds: [adminEmbed('🏠 إدارة الغرف الخاصة', text.join('\n') || 'لا توجد غرف نشطة حالياً.\nمدة الغرفة 30 يوماً، ويمكن تجديدها من قبل العضو أو الإدارة.')], components };
+  return withSectionImage({ embeds: [adminEmbed('🏠 إدارة الغرف الخاصة', text.join('\n') || 'لا توجد غرف نشطة حالياً.\nمدة الغرفة حسب المنتج ويمكن تجديدها من قبل العضو.')], components }, 'إدارة الغرف الخاصة', 'مراجعة الغرف ومددها وتجديدها وإغلاقها', 'ROOMS');
 }
 function salesPayload(guildId) {
   const orders = database.pendingProductPurchases(guildId);
@@ -199,9 +205,8 @@ function salesPayload(guildId) {
     components.push(new ActionRowBuilder().addComponents(menu));
   }
   components.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
-  return { embeds: [adminEmbed('🧾 طلبات المتجر', text.join('\n') || 'لا توجد طلبات معلقة حالياً.\nطلبات الدفع النقدي لا تُعتمد إلا بعد التحقق الفعلي من الدفع.')], components };
+  return withSectionImage({ embeds: [adminEmbed('🧾 طلبات المتجر', text.join('\n') || 'لا توجد طلبات معلقة حالياً.\nطلبات الدفع النقدي لا تُعتمد إلا بعد التحقق الفعلي من الدفع.')], components }, 'طلبات المتجر', 'مراجعة طلبات الشراء والدفع والتسليم', 'SALES');
 }
-
 function productModal(product) {
   const modal = new ModalBuilder().setCustomId(product ? `admin:product:save:${product.id}` : 'admin:product:save:new').setTitle(product ? 'تعديل منتج DOS SHOP' : 'إضافة منتج إلى DOS SHOP');
   const field = (id,label,value,placeholder,style,maxLength) => {
@@ -243,6 +248,7 @@ function parseProductFields(interaction) {
   if (!['color','text_room','voice_room','role','digital','manual'].includes(productType)) throw new Error('نوع المنتج غير معروف.');
   if (productType === 'role' && !/^\d{15,22}$/.test(roleId || '')) throw new Error('اكتب نوع الرتبة هكذا: role:ROLE_ID');
   if (currency === 'coin' && !Number.isSafeInteger(price)) throw new Error('سعر العملات غير صالح.');
+  if (productType === 'color' && price < 1) throw new Error('حدد سعراً موجباً لمنتج Colors قبل تفعيله.');
   if (currency === 'cash' && ['text_room','voice_room'].includes(productType)) throw new Error('الغرف الخاصة حالياً تُباع بعملات DOS حتى يمكن تجديدها تلقائياً كل 30 يوماً.');
   if (links[0] && !/^https:\/\//i.test(links[0])) throw new Error('رابط صورة المنتج يجب أن يبدأ بـ https://');
   if (links[1] && !/^https:\/\//i.test(links[1])) throw new Error('رابط الدفع يجب أن يبدأ بـ https://');
@@ -304,10 +310,10 @@ async function handleAdminInteraction(interaction, client) {
     const product = database.products(interaction.guildId,false).find((p) => p.id === id);
     if (!product) return interaction.reply({ content: 'المنتج غير موجود.', flags: MessageFlags.Ephemeral });
     const embed = adminEmbed(`🛍️ ${product.name}`, `رقم المنتج: #${id}\nالسعر: ${product.price} ${product.currency}\nالنوع: ${product.product_type}\nالحالة: ${product.active ? 'متاح' : 'متوقف'}\nالمدة: ${product.duration_days} يوماً\n\n${product.description || ''}`);
-    return interaction.update({ embeds: [embed], components: [
-      new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin:product:edit:${id}`).setLabel('تعديل').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`admin:product:toggle:${id}`).setLabel(product.active ? 'إيقاف المنتج' : 'تشغيل المنتج').setStyle(product.active ? ButtonStyle.Danger : ButtonStyle.Success)),
+    return withSectionImage({ embeds: [embed], components: [
+      new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin:product:edit:${id}`).setLabel('تعديل الاسم والسعر').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId(`admin:product:toggle:${id}`).setLabel(product.active ? 'إيقاف المنتج' : 'تشغيل المنتج').setStyle(product.active ? ButtonStyle.Danger : ButtonStyle.Success)),
       new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:back').setLabel('رجوع للمتجر').setStyle(ButtonStyle.Secondary))
-    ] });
+    ] }, product.name, `#${id} • ${product.product_type} • ${product.active ? 'مفعّل' : 'متوقف'}`, 'ITEM');
   }
   if (parts[1] === 'shop' && parts[2] === 'back') return interaction.update(await shopAdminPayload(interaction.guildId));
   if (parts[1] === 'product' && parts[2] === 'edit') {
@@ -356,10 +362,10 @@ async function handleAdminInteraction(interaction, client) {
     const order = database.getProductPurchase(interaction.guildId,id);
     if (!order || !['awaiting_payment','pending_fulfillment'].includes(order.status)) return interaction.reply({ content: 'الطلب غير متاح للمراجعة.', flags: MessageFlags.Ephemeral });
     const cashWarning = order.currency === 'cash' ? '\n\n⚠️ لا تضغط اعتماد إلا بعد التأكد من وصول الدفع فعلياً.' : '';
-    return interaction.update({ embeds: [adminEmbed(`طلب المتجر #${id}`, `المنتج: ${order.product_name}\nالعضو: <@${order.user_id}>\nالسعر: ${order.price} ${order.currency}\nالحالة: ${order.status}${cashWarning}`)], components: [
+    return interaction.update(withSectionImage({ embeds: [adminEmbed(`طلب المتجر #${id}`, `المنتج: ${order.product_name}\nالعضو: <@${order.user_id}>\nالسعر: ${order.price} ${order.currency}\nالحالة: ${order.status}${cashWarning}`)], components: [
       new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin:purchase:approve:${id}`).setLabel(order.currency === 'cash' ? 'اعتماد بعد التحقق من الدفع' : 'تسليم المنتج').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`admin:purchase:reject:${id}`).setLabel('رفض الطلب').setStyle(ButtonStyle.Danger)),
       new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:pending').setLabel('رجوع للطلبات').setStyle(ButtonStyle.Secondary))
-    ] });
+    ] }, `طلب المتجر #${id}`, `${order.product_name} • ${order.price} ${order.currency}`, 'ORDER'));
   }
   if (parts[1] === 'purchase' && parts[2] === 'approve') {
     try {
@@ -383,10 +389,10 @@ async function handleAdminInteraction(interaction, client) {
   if (parts[1] === 'rooms' && parts[2] === 'select' && interaction.isStringSelectMenu()) {
     const room = database.getRoom(interaction.guildId,Number(interaction.values[0]));
     if (!room) return interaction.reply({ content: 'الغرفة غير موجودة أو انتهت.', flags: MessageFlags.Ephemeral });
-    return interaction.update({ embeds: [adminEmbed(`غرفة خاصة #${room.id}`, `القناة: <#${room.channel_id}>\nالمالك: <@${room.user_id}>\nالنوع: ${room.channel_type === 'voice' ? 'صوتية' : 'كتابية'}\nتاريخ الانتهاء: <t:${room.expires_at}:F>`) ], components: [
+    return interaction.update(withSectionImage({ embeds: [adminEmbed(`غرفة خاصة #${room.id}`, `القناة: <#${room.channel_id}>\nالمالك: <@${room.user_id}>\nالنوع: ${room.channel_type === 'voice' ? 'صوتية' : 'كتابية'}\nتاريخ الانتهاء: <t:${room.expires_at}:F>`) ], components: [
       new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`admin:room:extend:${room.id}`).setLabel('تمديد 30 يوماً').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`admin:room:close:${room.id}`).setLabel('إغلاق الغرفة').setStyle(ButtonStyle.Danger)),
       new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:rooms:back').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
-    ] });
+    ] }, `غرفة خاصة #${room.id}`, `المالك: ${room.user_id}`, 'ROOM'));
   }
   if (parts[1] === 'rooms' && parts[2] === 'back') return interaction.update(roomsPayload(interaction.guildId));
   if (parts[1] === 'room' && parts[2] === 'extend') {
@@ -409,14 +415,15 @@ async function handleAdminInteraction(interaction, client) {
   if (parts[1] === 'content' && parts[2] === 'choose' && interaction.isStringSelectMenu()) return interaction.showModal(contentModal(interaction.values[0],interaction.guildId));
   if (parts[1] === 'content' && parts[2] === 'preview' && interaction.isStringSelectMenu()) {
     const key = interaction.values[0];
-    return interaction.update({ embeds: [makeContentEmbed(interaction.guildId,key)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:content:back').setLabel('رجوع لإدارة الرسائل').setStyle(ButtonStyle.Secondary))] });
+    const item = DEFAULT_CONTENT[key];
+    return interaction.update(withSectionImage({ embeds: [makeContentEmbed(interaction.guildId,key)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:content:back').setLabel('رجوع لإدارة الرسائل').setStyle(ButtonStyle.Secondary))] }, item ? item.title : 'معاينة الرسالة', 'هذه معاينة للنص المحفوظ قبل النشر', 'PREVIEW'));
   }
   if (parts[1] === 'content' && parts[2] === 'back') return interaction.update(contentAdminPayload());
   if (parts[1] === 'panel' && parts[2] === 'publish') {
-    return interaction.update({ embeds: [adminEmbed('📌 نشر اللوحة الرئيسية', 'اختر القناة التي تريد نشر اللوحة فيها. إذا كانت اللوحة موجودة مسبقاً فسيتم تحديثها.')], components: [
+    return interaction.update(withSectionImage({ embeds: [adminEmbed('📌 نشر اللوحة الرئيسية', 'اختر القناة التي تريد نشر اللوحة فيها. إذا كانت اللوحة موجودة مسبقاً فسيتم تحديثها.')], components: [
       new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:panel:publish-channel').setPlaceholder('اختر قناة اللوحة الرئيسية').setChannelTypes(ChannelType.GuildText)),
       new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
-    ] });
+    ] }, 'نشر رسالة الترحيب', 'اختر القناة التي ستظهر فيها صورة السيرفر وأزرار القوانين', 'PUBLISH'));
   }
   if (parts[1] === 'panel' && parts[2] === 'publish-channel' && interaction.isChannelSelectMenu()) {
     const channel = await interaction.guild.channels.fetch(interaction.values[0]);

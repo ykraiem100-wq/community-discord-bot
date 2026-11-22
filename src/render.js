@@ -302,16 +302,114 @@ async function renderShopGrid(items = []) {
   return canvas.toBuffer('image/png');
 }
 
-// Exact public panel image; its five labels and icon placements are preserved from the approved art.
-async function renderMainPanel({ title = '', body = '' } = {}) {
-  // The selected frame, logo and five button tiles remain exactly as approved.
-  // Only the editable welcome copy is laid into the original central text area.
-  const bg = await loadTemplate('main-panel-base.png');
-  const { canvas, ctx } = scaleCanvas(bg, 1.8);
-  const safeTitle = truncate(title || 'مرحباً بك في مجتمع DOS COMMUNITY', 58);
-  const lines = wrapLines(ctx, body || 'هنا تجد جميع الأنظمة والقوانين، يمكنك تفعيل رتب التفاعل، ومعرفة نظام السيرفر والمشاركة في الفعاليات.', 620, 18, 2);
-  drawText(ctx, safeTitle, 410, 195, 21, C.white, 900, 'center', 640);
-  lines.forEach((line, index) => drawText(ctx, line, 410, 232 + index * 28, 17, C.silver, 700, 'center', 635));
+// Welcome panel modeled on the supplied Discord welcome-message reference.
+// The guild icon/name and owner signature are dynamic; editable copy comes from the admin panel.
+async function renderMainPanel({ guild = null, title = '', body = '', signature = '' } = {}) {
+  const canvas = createCanvas(1200, 900);
+  const ctx = canvas.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 1200, 900);
+  bg.addColorStop(0, '#303136'); bg.addColorStop(1, '#383A40');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 900);
+  patch(ctx, 16, 16, 1168, 868, '#37393F', 22, '#4A4C53');
+  patch(ctx, 16, 16, 10, 868, '#D51F32', 8);
+  const iconUrl = guild && typeof guild.iconURL === 'function'
+    ? guild.iconURL({ extension: 'png', size: 512 }) : null;
+  const icon = await loadSafeImage(iconUrl);
+  const logoSize = 230, logoX = 600 - logoSize / 2, logoY = 62;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(600, logoY + logoSize / 2, logoSize / 2 + 5, 0, Math.PI * 2);
+  ctx.strokeStyle = '#D51F32'; ctx.lineWidth = 5; ctx.shadowColor = 'rgba(213,31,50,0.35)'; ctx.shadowBlur = 18; ctx.stroke();
+  ctx.beginPath(); ctx.arc(600, logoY + logoSize / 2, logoSize / 2, 0, Math.PI * 2); ctx.clip();
+  if (icon) ctx.drawImage(icon, logoX, logoY, logoSize, logoSize);
+  else {
+    const fallback = ctx.createLinearGradient(logoX, logoY, logoX + logoSize, logoY + logoSize);
+    fallback.addColorStop(0, '#16181D'); fallback.addColorStop(1, '#555861');
+    ctx.fillStyle = fallback; ctx.fillRect(logoX, logoY, logoSize, logoSize);
+    drawText(ctx, 'DOS', 600, logoY + logoSize / 2, 60, C.white, 900, 'center', 170);
+  }
+  ctx.restore();
+  drawText(ctx, truncate(guild && guild.name ? guild.name : 'DOS COMMUNITY', 48), 600, 328, 40, C.white, 900, 'center', 1000);
+  drawText(ctx, title || 'مرحباً بك في مجتمعنا الرسمي', 600, 390, 30, '#F2F2F4', 800, 'center', 1060);
+  ctx.save(); ctx.strokeStyle = '#55575E'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(58, 430); ctx.lineTo(1142, 430); ctx.stroke(); ctx.restore();
+  const lines = wrapLines(ctx, body || '', 1050, 24, 10);
+  const startY = lines.length > 7 ? 475 : 500;
+  lines.forEach((line, index) => drawText(ctx, line, 600, startY + index * 39, 24, '#D9EAF0', 650, 'center', 1050));
+  ctx.save(); ctx.strokeStyle = '#55575E'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(58, 817); ctx.lineTo(1142, 817); ctx.stroke(); ctx.restore();
+  drawText(ctx, signature || 'تحيات إدارة DOS COMMUNITY', 1120, 846, 22, '#BFC1C7', 700, 'right', 960);
+  return canvas.toBuffer('image/png');
+}
+
+// Wide shop banner with the custom DOS mascot. Products and prices remain database-driven.
+async function renderShopHeader() {
+  const source = await loadSafeImage(path.join(TEMPLATE_DIR, 'shop-mascot.png'));
+  const canvas = createCanvas(1200, 560);
+  const ctx = canvas.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 1200, 560);
+  bg.addColorStop(0, '#282A2F'); bg.addColorStop(1, '#383A40');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 560);
+  if (source) drawImageContain(ctx, source, 0, 80, 1200, 400, 18);
+  patch(ctx, 10, 12, 8, 536, '#E4B94F', 5);
+  patch(ctx, 690, 110, 475, 330, 'rgba(38,40,46,0.25)', 24, 'rgba(255,255,255,0.05)');
+  drawText(ctx, 'CREDITS SHOP', 930, 235, 58, '#FFF8E7', 1000, 'center', 440);
+  drawText(ctx, 'DOS COMMUNITY', 930, 300, 25, '#E7C26D', 850, 'center', 420);
+  ctx.save(); ctx.strokeStyle = '#CDA64B'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(770, 342); ctx.lineTo(1090, 342); ctx.stroke(); ctx.restore();
+  drawText(ctx, 'COLORS  •  CUSTOM ROLES  •  ITEMS', 930, 385, 18, '#E5E6E9', 800, 'center', 420);
+  return canvas.toBuffer('image/png');
+}
+
+// Full-spectrum HSV wheel: a visual reference paired with a hex-input modal for any sRGB color.
+function renderColorWheel() {
+  const size = 430, center = size / 2, radius = 185;
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#34363B'; ctx.fillRect(0, 0, size, size);
+  const image = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+    const dx = x - center, dy = y - center, r = Math.sqrt(dx * dx + dy * dy);
+    const index = (y * size + x) * 4;
+    if (r > radius) { image.data[index + 3] = 0; continue; }
+    const hue = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+    const saturation = Math.min(1, r / radius), hh = hue / 60;
+    const chroma = saturation, second = chroma * (1 - Math.abs((hh % 2) - 1));
+    let rr = 0, gg = 0, bb = 0;
+    if (hh < 1) [rr, gg, bb] = [chroma, second, 0];
+    else if (hh < 2) [rr, gg, bb] = [second, chroma, 0];
+    else if (hh < 3) [rr, gg, bb] = [0, chroma, second];
+    else if (hh < 4) [rr, gg, bb] = [0, second, chroma];
+    else if (hh < 5) [rr, gg, bb] = [second, 0, chroma];
+    else [rr, gg, bb] = [chroma, 0, second];
+    const m = 1 - chroma;
+    image.data[index] = Math.round((rr + m) * 255);
+    image.data[index + 1] = Math.round((gg + m) * 255);
+    image.data[index + 2] = Math.round((bb + m) * 255);
+    image.data[index + 3] = 255;
+  }
+  ctx.putImageData(image, 0, 0);
+  ctx.beginPath(); ctx.arc(center, center, radius + 2, 0, Math.PI * 2);
+  ctx.strokeStyle = '#E5C36B'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.beginPath(); ctx.arc(center, center, 28, 0, Math.PI * 2);
+  ctx.fillStyle = '#34363B'; ctx.fill(); ctx.strokeStyle = '#F2F2F4'; ctx.lineWidth = 2; ctx.stroke();
+  drawText(ctx, 'HEX', center, center, 13, C.white, 900, 'center', 32);
+  return canvas.toBuffer('image/png');
+}
+
+// Reusable image header rendered for every admin section, with live section title/description.
+function renderAdminSection({ title = 'إدارة DOS COMMUNITY', subtitle = 'لوحة التحكم', emblem = 'DOS' } = {}) {
+  const canvas = createCanvas(1200, 280);
+  const ctx = canvas.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 1200, 280);
+  bg.addColorStop(0, '#292B31'); bg.addColorStop(1, '#3A3C43');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 280);
+  patch(ctx, 10, 10, 1180, 260, '#37393F', 22, '#50525A');
+  patch(ctx, 10, 10, 9, 260, '#DDB84E', 5);
+  ctx.save(); ctx.beginPath(); ctx.arc(145, 140, 82, 0, Math.PI * 2);
+  const halo = ctx.createLinearGradient(70, 60, 220, 220);
+  halo.addColorStop(0, '#EACB76'); halo.addColorStop(1, '#6F8F9F');
+  ctx.fillStyle = '#25272D'; ctx.fill(); ctx.strokeStyle = halo; ctx.lineWidth = 5; ctx.stroke(); ctx.restore();
+  drawText(ctx, String(emblem).slice(0, 10), 145, 140, 32, '#EBD38D', 900, 'center', 136);
+  drawText(ctx, 'DOS COMMUNITY  •  CONTROL PANEL', 280, 85, 18, '#DCC27B', 850, 'left', 850);
+  drawText(ctx, title, 280, 143, 43, '#F5F5F6', 900, 'left', 850);
+  drawText(ctx, subtitle, 280, 206, 22, '#C8CBD1', 650, 'left', 850);
   return canvas.toBuffer('image/png');
 }
 
@@ -389,5 +487,8 @@ module.exports = {
   renderLevelUpBanner,
   renderAdminDashboard,
   renderAdminShop,
+  renderShopHeader,
+  renderColorWheel,
+  renderAdminSection,
   TEMPLATE_DIR
 };

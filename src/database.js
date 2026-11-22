@@ -247,6 +247,14 @@ function createProduct(guildId, data) {
     .run(guildId, data.name, data.description || '', data.price, data.currency, data.cash_currency || 'JOD', data.product_type, data.image_url || null, data.payment_url || null, data.role_id || null, data.duration_days || 30);
   return Number(result.lastInsertRowid);
 }
+function ensureDefaultColorProduct(guildId) {
+  const existing = db.prepare("SELECT id FROM shop_products WHERE guild_id=? AND product_type='color' ORDER BY id ASC LIMIT 1").get(guildId);
+  if (existing) return Number(existing.id);
+  // A disabled-by-default Colors product prevents accidental free purchases.
+  const result = db.prepare("INSERT INTO shop_products(guild_id,name,description,price,currency,product_type,active) VALUES(?,?,?,0,'coin','color',0)")
+    .run(guildId, 'Colors', 'اشترِ لوناً خاصاً واختره من عجلة الألوان الكاملة. حدّد السعر من لوحة إدارة المتجر قبل تفعيله.');
+  return Number(result.lastInsertRowid);
+}
 function updateProduct(guildId, id, data) {
   const old = db.prepare('SELECT * FROM shop_products WHERE guild_id=? AND id=?').get(guildId, id);
   if (!old) return false;
@@ -387,7 +395,7 @@ module.exports = {
   setSetting, roles: (guildId, kind) => q.roles.all(guildId, kind), setRole,
   createPurchase, orders: (guildId) => q.orders.all(guildId), reviewOrder: reviewTransaction,
   setConfig, getConfig, featureEnabled, setFeature, setContent, getContent, savePanel, saveShopMessage,
-  createProduct, updateProduct, setProductActive, removeProduct, products,
+  createProduct, ensureDefaultColorProduct, updateProduct, setProductActive, removeProduct, products,
   purchaseProduct, getProductPurchase, updateProductPurchase, pendingProductPurchases, refundProductPurchase,
   setCustomColorRole, getCustomColorRole, createRoomRecord, activeRooms, getRoom,
   markRoomWarned, closeRoom, extendRoom, renewRoom, setInteractionRoles, interactionRoles,

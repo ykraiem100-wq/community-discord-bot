@@ -1,13 +1,14 @@
 'use strict';
 const {
   EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  StringSelectMenuBuilder, ChannelType, PermissionFlagsBits, MessageFlags
+  StringSelectMenuBuilder, ChannelType, PermissionFlagsBits, MessageFlags,
+  ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const database = require('./database');
 const { CYAN } = require('./panels');
-const { renderShopGrid } = require('./render');
+const { renderShopHeader, renderColorWheel } = require('./render');
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 25;
 const COLOR_PAGE_SIZE = 25;
 const COLOR_STEPS = [0, 51, 102, 153, 204, 255];
 const COLOR_PALETTE = [];
@@ -26,15 +27,15 @@ async function shopPayload(guildId, page) {
   if (!database.featureEnabled(guildId, 'shop')) {
     return { content: '🛍️ DOS SHOP مغلق مؤقتاً. تابع إعلانات DOS COMMUNITY لمعرفة موعد عودته.', components: [] };
   }
+  database.ensureDefaultColorProduct(guildId);
   const products = database.products(guildId, true);
   const maxPage = Math.max(0, Math.ceil(products.length / PAGE_SIZE) - 1);
   const safePage = Math.min(Math.max(0, Number(page) || 0), maxPage);
   const current = products.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
-  const visualItems = current.map((product) => ({ ...product, display_price: currencyLabel(product) }));
-  const image = await renderShopGrid(visualItems);
+  const image = await renderShopHeader();
   const rows = [];
   if (current.length) {
-    const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('اختر المنتج الذي تريد شراءه').setMinValues(1).setMaxValues(1)
+    const menu = new StringSelectMenuBuilder().setCustomId('shop:buy').setPlaceholder('Buy... اختر المنتج الذي تريد شراءه').setMinValues(1).setMaxValues(1)
       .addOptions(current.map((p) => ({ label: p.name.slice(0, 100), value: String(p.id), description: currencyLabel(p).slice(0, 100), emoji: productIcon(p.product_type) })));
     rows.push(new ActionRowBuilder().addComponents(menu));
   }
@@ -46,25 +47,34 @@ async function shopPayload(guildId, page) {
     rows.push(row);
   }
   return {
-    content: '**DOS SHOP** • صفحة ' + (safePage + 1) + '/' + (maxPage + 1) + '\nاختر المنتج من القائمة أسفل الصورة.',
-    files: [new AttachmentBuilder(image, { name: 'dos-shop.png' })],
+    content: current.length
+      ? `**CREDITS SHOP**\nاختر السلعة من قائمة **Buy...** أسفل الصورة. المنتجات والأسعار تضيفها الإدارة من لوحة التحكم.`
+      : '**CREDITS SHOP**\nالمتجر جاهز، لكن لا توجد منتجات مفعّلة بعد. ستظهر السلع هنا عندما تضيفها الإدارة وتفعّلها.',
+    files: [new AttachmentBuilder(image, { name: 'dos-credits-shop.png' })],
     attachments: [],
     components: rows
   };
 }
+
 function colorPickerPayload(guildId, purchaseId, page) {
   const totalPages = Math.ceil(COLOR_PALETTE.length / COLOR_PAGE_SIZE);
   const safePage = Math.min(Math.max(0, Number(page) || 0), totalPages - 1);
   const colors = COLOR_PALETTE.slice(safePage * COLOR_PAGE_SIZE, (safePage + 1) * COLOR_PAGE_SIZE);
-  const menu = new StringSelectMenuBuilder().setCustomId(`color:choose:${guildId}:${purchaseId}`).setPlaceholder('اختر لون رتبتك')
+  const menu = new StringSelectMenuBuilder().setCustomId(`color:choose:${guildId}:${purchaseId}`).setPlaceholder('اختر لوناً جاهزاً من القائمة')
     .setMinValues(1).setMaxValues(1).addOptions(colors.map((hex) => ({ label: `لون ${hex}`, value: hex, description: 'اضغط لاختيار هذا اللون' })));
   const rows = [new ActionRowBuilder().addComponents(menu)];
   const nav = new ActionRowBuilder();
   if (safePage > 0) nav.addComponents(new ButtonBuilder().setCustomId(`color:page:${guildId}:${purchaseId}:${safePage - 1}`).setLabel('السابق').setStyle(ButtonStyle.Secondary));
-  nav.addComponents(new ButtonBuilder().setCustomId('color:page:noop:0').setLabel(`${safePage + 1}/${totalPages} • ${COLOR_PALETTE.length} لون`).setStyle(ButtonStyle.Secondary).setDisabled(true));
+  nav.addComponents(new ButtonBuilder().setCustomId('color:page:noop:0').setLabel(`${safePage + 1}/${totalPages} • ${COLOR_PALETTE.length} لون جاهز`).setStyle(ButtonStyle.Secondary).setDisabled(true));
   if (safePage < totalPages - 1) nav.addComponents(new ButtonBuilder().setCustomId(`color:page:${guildId}:${purchaseId}:${safePage + 1}`).setLabel('التالي').setStyle(ButtonStyle.Secondary));
   rows.push(nav);
-  return { content: '🎨 **اختر لونك الخاص**\nيوجد أكثر من 200 لون. اختر اللون المناسب، وسيُنشئ البوت رتبتك تلقائياً.', components: rows };
+  rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`color:hex:${guildId}:${purchaseId}`).setLabel('اختيار من عجلة الألوان / HEX').setEmoji('🎨').setStyle(ButtonStyle.Primary)));
+  return {
+    content: `🎨 **اختر لون رتبتك الخاصة**\nالعجلة تعرض نطاق الألوان الكامل. اختر الدرجة بصرياً ثم اضغط «اختيار من عجلة الألوان / HEX» واكتب كود اللون مثل #12A4EF. أو اختر لوناً جاهزاً من القائمة.`,
+    files: [new AttachmentBuilder(renderColorWheel(), { name: 'dos-full-color-wheel.png' })],
+    attachments: [],
+    components: rows
+  };
 }
 
 async function createPrivateRoom(guild, member, product) {
@@ -207,6 +217,13 @@ async function handleShopInteraction(interaction, client) {
     }
     return interaction.reply({ content: `تم تسجيل طلبك #${result.id} لـ **${product.name}** وينتظر مراجعة الإدارة.`, flags: MessageFlags.Ephemeral });
   }
+  if (parts[0] === 'color' && parts[1] === 'hex' && interaction.isButton()) {
+    const modal = new ModalBuilder().setCustomId(`color:hex:${parts[2]}:${parts[3]}`).setTitle('اختيار لون مخصص')
+      .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder()
+        .setCustomId('color_hex').setLabel('كود اللون HEX').setStyle(TextInputStyle.Short)
+        .setPlaceholder('#12A4EF').setMinLength(6).setMaxLength(7).setRequired(true)));
+    return interaction.showModal(modal);
+  }
   if (parts[0] === 'color' && parts[1] === 'page') {
     const guildId = parts[2];
     const purchaseId = Number(parts[3]);
@@ -215,45 +232,7 @@ async function handleShopInteraction(interaction, client) {
     return interaction.update(colorPickerPayload(guildId, purchaseId, Number(parts[4]) || 0));
   }
   if (parts[0] === 'color' && parts[1] === 'choose' && interaction.isStringSelectMenu()) {
-    const guildId = parts[2];
-    const purchaseId = Number(parts[3]);
-    const purchase = database.getProductPurchase(guildId, purchaseId);
-    if (!purchase || purchase.user_id !== interaction.user.id || purchase.status !== 'awaiting_selection') return interaction.reply({ content: 'هذا الاختيار لا يخصك أو تم استخدامه سابقاً.', flags: MessageFlags.Ephemeral });
-    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId);
-    const member = await guild.members.fetch(interaction.user.id);
-    const color = String(interaction.values[0]).toUpperCase();
-    if (!COLOR_PALETTE.includes(color)) return interaction.reply({ content: 'اللون المختار غير صالح.', flags: MessageFlags.Ephemeral });
-    try {
-      const botMember = guild.members.me;
-      if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('البوت يحتاج صلاحية Manage Roles لإنشاء رتبة اللون.');
-      const memberRole = guild.roles.cache.find((candidate) => {
-        const name = candidate.name.trim().toLocaleLowerCase();
-        return ['member','members','عضو','الأعضاء'].includes(name) || name.includes('member');
-      });
-      if (!memberRole) throw new Error('أنشئ رتبة باسم Member أولاً حتى يضع البوت رتب الألوان فوقها.');
-      const targetPosition = memberRole.position + 1;
-      if (botMember.roles.highest.position <= targetPosition) {
-        throw new Error('ارفع أعلى رتبة للبوت فوق رتبة Member أولاً حتى يستطيع وضع رتبة اللون فوقها.');
-      }
-      let roleId = database.getCustomColorRole(guildId, interaction.user.id);
-      let role = roleId ? await guild.roles.fetch(roleId).catch(() => null) : null;
-      if (role) await role.edit({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
-      else role = await guild.roles.create({ name: `DOS • ${member.displayName}`.slice(0,100), color, reason: `DOS color purchase #${purchaseId}` });
-      role = await role.setPosition(targetPosition, { reason: `Place DOS color role above Member for ${member.user.tag}` });
-      if (role.position >= botMember.roles.highest.position) throw new Error('رتبة اللون أعلى من رتبة البوت ولا يمكن إسنادها.');
-      await member.roles.add(role, 'DOS custom color role');
-      database.setCustomColorRole(guildId, interaction.user.id, role.id);
-      database.updateProductPurchase(guildId, purchaseId, 'completed', { color, roleId: role.id }, interaction.user.id);
-      return interaction.update({ content: `🎨 تم اختيار اللون **${color}** وإنشاء رتبتك ${role}.`, components: [] });
-    } catch (error) {
-      if (purchase.currency === 'coin') {
-        database.refundProductPurchase(guildId,purchaseId);
-        database.updateProductPurchase(guildId,purchaseId,'rejected',{ error:error.message },interaction.user.id);
-      } else {
-        database.updateProductPurchase(guildId,purchaseId,'pending_fulfillment',{ error:error.message },interaction.user.id);
-      }
-      return interaction.update({ content: `تعذر إنشاء رتبة اللون: ${error.message}${purchase.currency === 'coin' ? ' تمت إعادة DOS Coin إلى محفظتك.' : ' أُعيد الطلب إلى قائمة الإدارة للمراجعة.'}`, components: [] });
-    }
+    return applyColorSelection(interaction, client, parts[2], Number(parts[3]), interaction.values[0], 'update');
   }
   if (parts[0] === 'room' && parts[1] === 'renew') {
     const guildId = parts[2];
@@ -264,6 +243,59 @@ async function handleShopInteraction(interaction, client) {
     return interaction.reply({ content: `تم تجديد الغرفة بنجاح! تاريخ الانتهاء الجديد: <t:${result.expires_at}:F>. تم خصم ${result.price} DOS Coin.`, flags: MessageFlags.Ephemeral });
   }
   return false;
+}
+
+async function applyColorSelection(interaction, client, guildId, purchaseId, rawColor, mode) {
+  const replyPrivately = (payload) => interaction.reply(interaction.guildId ? { ...payload, flags: MessageFlags.Ephemeral } : payload);
+  const purchase = database.getProductPurchase(guildId, purchaseId);
+  const isValidColor = /^#?[0-9A-F]{6}$/i.test(String(rawColor || '').trim());
+  const invalid = { content: 'اكتب كود لون HEX صحيحاً، مثال `#12A4EF`.' };
+  if (!purchase || purchase.user_id !== interaction.user.id || purchase.status !== 'awaiting_selection') {
+    const payload = { content: 'اختيار اللون غير صالح أو تم استخدامه سابقاً.' };
+    return mode === 'update' ? interaction.update(payload) : replyPrivately(payload);
+  }
+  if (!isValidColor) return mode === 'update' ? interaction.update(invalid) : replyPrivately(invalid);
+  const color = ('#' + String(rawColor).trim().replace(/^#/, '')).toUpperCase();
+  try {
+    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId);
+    const member = await guild.members.fetch(interaction.user.id);
+    const botMember = guild.members.me;
+    if (!botMember || !botMember.permissions.has(PermissionFlagsBits.ManageRoles)) throw new Error('البوت يحتاج صلاحية Manage Roles لإنشاء رتبة اللون.');
+    const memberRole = guild.roles.cache.find((candidate) => {
+      const name = candidate.name.trim().toLocaleLowerCase();
+      return ['member','members','عضو','الأعضاء'].includes(name) || name.includes('member');
+    });
+    if (!memberRole) throw new Error('أنشئ رتبة باسم Member أولاً حتى يضع البوت رتب الألوان فوقها.');
+    const targetPosition = memberRole.position + 1;
+    if (botMember.roles.highest.position <= targetPosition) throw new Error('ارفع أعلى رتبة للبوت فوق رتبة Member أولاً حتى يستطيع وضع رتبة اللون فوقها.');
+    let roleId = database.getCustomColorRole(guildId, interaction.user.id);
+    let role = roleId ? await guild.roles.fetch(roleId).catch(() => null) : null;
+    if (role) await role.edit({ name: `DOS • ${member.displayName}`.slice(0, 100), color, reason: `DOS color purchase #${purchaseId}` });
+    else role = await guild.roles.create({ name: `DOS • ${member.displayName}`.slice(0, 100), color, reason: `DOS color purchase #${purchaseId}` });
+    role = await role.setPosition(targetPosition, { reason: `Place DOS color role above Member for ${member.user.tag}` });
+    if (role.position >= botMember.roles.highest.position) throw new Error('رتبة اللون أعلى من رتبة البوت ولا يمكن إسنادها.');
+    await member.roles.add(role, 'DOS custom color role');
+    database.setCustomColorRole(guildId, interaction.user.id, role.id);
+    database.updateProductPurchase(guildId, purchaseId, 'completed', { color, roleId: role.id }, interaction.user.id);
+    const payload = { content: `🎨 تم اختيار اللون **${color}** وإنشاء رتبتك ${role}.`, components: [], embeds: [], files: [] };
+    return mode === 'update' ? interaction.update(payload) : replyPrivately(payload);
+  } catch (error) {
+    if (purchase.currency === 'coin') {
+      database.refundProductPurchase(guildId, purchaseId);
+      database.updateProductPurchase(guildId, purchaseId, 'rejected', { error: error.message }, interaction.user.id);
+    } else {
+      database.updateProductPurchase(guildId, purchaseId, 'pending_fulfillment', { error: error.message }, interaction.user.id);
+    }
+    const payload = { content: `تعذر إنشاء رتبة اللون: ${error.message}${purchase.currency === 'coin' ? ' تمت إعادة DOS Coin إلى محفظتك.' : ' أُعيد الطلب إلى قائمة الإدارة للمراجعة.'}`, components: [], embeds: [] };
+    return mode === 'update' ? interaction.update(payload) : replyPrivately(payload);
+  }
+}
+
+async function handleShopModal(interaction, client) {
+  const parts = interaction.customId.split(':');
+  if (parts[0] !== 'color' || parts[1] !== 'hex') return false;
+  const color = interaction.fields.getTextInputValue('color_hex').trim();
+  return applyColorSelection(interaction, client, parts[2], Number(parts[3]), color, 'reply');
 }
 
 async function processRoomExpirations(client) {
@@ -290,4 +322,4 @@ async function processRoomExpirations(client) {
   }
 }
 
-module.exports = { shopPayload, colorPickerPayload, handleShopInteraction, deliverProduct, publishShop, refreshPublishedShop, processRoomExpirations, COLOR_PALETTE };
+module.exports = { shopPayload, colorPickerPayload, handleShopInteraction, handleShopModal, deliverProduct, publishShop, refreshPublishedShop, processRoomExpirations, COLOR_PALETTE };

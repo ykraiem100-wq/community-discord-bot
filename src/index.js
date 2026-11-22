@@ -7,7 +7,7 @@ const {
 const database = require('./database');
 const { createWalletImage } = require('./wallet');
 const { renderTopLeaderboard, renderLevelUpBanner } = require('./render');
-const { shopPayload, handleShopInteraction, processRoomExpirations, colorPickerPayload } = require('./shop');
+const { shopPayload, handleShopInteraction, handleShopModal, processRoomExpirations, colorPickerPayload } = require('./shop');
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
 
@@ -466,8 +466,10 @@ client.on('interactionCreate',async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) return await handleSlashCommand(interaction);
     if (interaction.isModalSubmit()) {
-      const handled = await handleAdminModal(interaction);
-      if (handled !== false) return handled;
+      const adminHandled = await handleAdminModal(interaction);
+      if (adminHandled !== false) return adminHandled;
+      const shopHandled = await handleShopModal(interaction, client);
+      if (shopHandled !== false) return shopHandled;
     }
     if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
       if (interaction.customId.startsWith('admin:')) return await handleAdminInteraction(interaction,client);

@@ -25,12 +25,24 @@ const DEFAULT_CONTENT = {
     body: 'أنظمة DOS COMMUNITY:\n• DOS Coin: العملات والمحفظة.\n• XP والمستويات: تتطور مع تفاعلك الكتابي والصوتي.\n• DOS SHOP: منتجات ومزايا تُشترى بعملات DOS أو بالدفع الخارجي.\n• TOP: ترتيب المتصدرين.\n\nاستخدم /wallet و /top و /shop لعرض الأنظمة.'
   },
   events: {
-    title: '🎮 الفعاليات',
+    title: '🎮 Arena • الفعاليات',
     body: 'تابع فعاليات DOS COMMUNITY وشارك في المسابقات والتحديات والأنشطة الجماعية.\n\nArena & Events'
   },
+  social: {
+    title: '🌐 Social Media • منصات التواصل',
+    body: 'تابع حسابات DOS COMMUNITY الرسمية. تضيف الإدارة روابط المنصات هنا من لوحة التحكم.'
+  },
+  apply: {
+    title: '📝 Apply • التقديم',
+    body: 'للتقديم على الطاقم أو الانضمام إلى برامج السيرفر، اقرأ الشروط ثم تواصل مع الإدارة. يمكن تعديل خطوات التقديم من لوحة التحكم.'
+  },
+  news: {
+    title: '✨ New • آخر التحديثات',
+    body: 'تابع آخر التحديثات والإضافات والأنظمة الجديدة في DOS COMMUNITY. تضيف الإدارة الأخبار من لوحة التحكم.'
+  },
   main: {
-    title: 'مرحباً بك في مجتمع DOS COMMUNITY',
-    body: 'هنا تجد جميع الأنظمة والقوانين، يمكنك تفعيل رتب التفاعل، ومعرفة نظام السيرفر والمشاركة في الفعاليات.'
+    title: 'شكراً لانضمامك إلى DOS COMMUNITY الرسمي',
+    body: 'شكراً لانضمامك في خادم DOS COMMUNITY الرسمي.\nيمكنك مشاهدة جميع القوانين والأنظمة، ولا تنسَ اختيار رتب الإشعارات عن طريق الأزرار الموجودة بالأسفل. وفي حال تريد فهم السيرفر بشكل أفضل اضغط على زر قراءة المعلومات.\n\nWelcome to the official DOS COMMUNITY server. Here you can read every rule and system we run, and you can also pick up any of the notification roles using the buttons below. If you want to understand the server better, press the Read Information button.'
   }
 };
 
@@ -44,20 +56,23 @@ function makeContentEmbed(guildId, key) {
 }
 async function buildMainPanel(guild, guildId) {
   const main = content(guildId, 'main');
-  const image = await renderMainPanel({ title: main.title, body: main.body });
+  const owner = guild && guild.fetchOwner ? await guild.fetchOwner().catch(() => null) : null;
+  const signature = owner ? `تحيات إدارة ${owner.displayName || owner.user.username}` : `تحيات إدارة ${guild.name}`;
+  const image = await renderMainPanel({ guild, title: main.title, body: main.body, signature });
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('public:rules').setLabel('قوانين السيرفر').setEmoji('📜').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:info').setLabel('معلومات السيرفر').setEmoji('ℹ️').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('public:rules').setLabel('Server Rules').setEmoji('📕').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('public:info').setLabel('Read Information').setEmoji('📖').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('public:roles').setLabel('Roles').setEmoji('🎭').setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('public:notifications').setLabel('رتب التفاعل').setEmoji('🔔').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('public:system').setLabel('نظام السيرفر').setEmoji('⚙️').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('public:social').setLabel('Social Media').setEmoji('🌐').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('public:apply').setLabel('Apply').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('public:news').setLabel('New').setEmoji('✨').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('public:arena').setLabel('Arena').setEmoji('🎮').setStyle(ButtonStyle.Secondary)
   );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('public:events').setLabel('الفعاليات').setEmoji('🎮').setStyle(ButtonStyle.Secondary)
-  );
-  return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2, row3] };
+  return { files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
 }
+
 async function publishMainPanel(guild, channel) {
   if (!channel || !channel.isTextBased() || !channel.send) throw new Error('اختر قناة كتابية صالحة.');
   const settings = database.settings(guild.id);
@@ -85,11 +100,12 @@ async function publishMainPanel(guild, channel) {
 async function handlePublicPanelInteraction(interaction) {
   const [scope, action] = interaction.customId.split(':');
   if (!database.featureEnabled(interaction.guildId,'main_panel')) return interaction.reply({ content: 'اللوحة الرئيسية متوقفة حالياً.', flags: MessageFlags.Ephemeral });
-  if (scope === 'public' && ['rules', 'info', 'system', 'events'].includes(action)) {
-      if (action === 'events' && !database.featureEnabled(interaction.guildId, 'events')) {
+  if (scope === 'public' && ['rules', 'info', 'system', 'events', 'arena', 'social', 'apply', 'news'].includes(action)) {
+      if ((action === 'events' || action === 'arena') && !database.featureEnabled(interaction.guildId, 'events')) {
       return interaction.reply({ content: 'قسم الفعاليات متوقف حالياً.', flags: MessageFlags.Ephemeral });
     }
-    const item = content(interaction.guildId, action);
+    const contentKey = action === 'arena' ? 'events' : action;
+    const item = content(interaction.guildId, contentKey);
     const image = action === 'system'
       ? await renderLevelSystemPage({
           messageXp: database.getConfig(interaction.guildId, 'message_xp', '7'),
@@ -108,7 +124,7 @@ async function handlePublicPanelInteraction(interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
-  if (scope === 'public' && action === 'notifications') {
+  if (scope === 'public' && (action === 'notifications' || action === 'roles')) {
     if (!database.featureEnabled(interaction.guildId, 'interaction_roles')) {
       return interaction.reply({ content: 'اختيار رتب التفاعل متوقف حالياً.', flags: MessageFlags.Ephemeral });
     }
