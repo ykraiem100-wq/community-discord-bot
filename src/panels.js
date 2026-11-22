@@ -6,6 +6,29 @@ const {
 const database = require('./database');
 const { renderPanelPage, renderMainPanel, renderLevelSystemPage } = require('./render');
 
+const MAIN_PANEL_BUTTONS = Object.freeze([
+  { key: 'rules', label: 'Server Rules', emoji: '📕', action: 'rules' },
+  { key: 'info', label: 'Read Information', emoji: '📖', action: 'info' },
+  { key: 'roles', label: 'Roles', emoji: '🎭', action: 'roles' },
+  { key: 'social', label: 'Social Media', emoji: '🌐', action: 'social' },
+  { key: 'apply', label: 'Apply', emoji: '📝', action: 'apply' },
+  { key: 'news', label: 'New', emoji: '✨', action: 'news' },
+  { key: 'arena', label: 'Arena', emoji: '🎮', action: 'arena' }
+]);
+
+function selectedMainPanelButtons(guildId) {
+  const fallback = MAIN_PANEL_BUTTONS.map((item) => item.key);
+  const raw = database.getConfig(guildId, 'main_panel_buttons', JSON.stringify(fallback));
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return fallback;
+    const allowed = new Set(MAIN_PANEL_BUTTONS.map((item) => item.key));
+    return MAIN_PANEL_BUTTONS.filter((item) => parsed.includes(item.key) && allowed.has(item.key)).map((item) => item.key);
+  } catch {
+    return fallback;
+  }
+}
+
 const CYAN = 0x36D9FF;
 const DEFAULT_CONTENT = {
   rules: {
@@ -59,24 +82,22 @@ async function buildMainPanel(guild, guildId) {
   const owner = guild && guild.fetchOwner ? await guild.fetchOwner().catch(() => null) : null;
   const signature = owner ? `تحيات إدارة ${owner.displayName || owner.user.username}` : `تحيات إدارة ${guild.name}`;
   const image = await renderMainPanel({ guild, title: main.title, body: main.body, signature });
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('public:rules').setLabel('Server Rules').setEmoji('📕').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:info').setLabel('Read Information').setEmoji('📖').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:roles').setLabel('Roles').setEmoji('🎭').setStyle(ButtonStyle.Secondary)
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('public:social').setLabel('Social Media').setEmoji('🌐').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:apply').setLabel('Apply').setEmoji('📝').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:news').setLabel('New').setEmoji('✨').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('public:arena').setLabel('Arena').setEmoji('🎮').setStyle(ButtonStyle.Secondary)
-  );
+  const selected = new Set(selectedMainPanelButtons(guildId));
+  const visibleButtons = MAIN_PANEL_BUTTONS.filter((item) => selected.has(item.key));
+  const components = [];
+  for (let index = 0; index < visibleButtons.length; index += 5) {
+    const row = new ActionRowBuilder().addComponents(visibleButtons.slice(index, index + 5).map((item) =>
+      new ButtonBuilder().setCustomId(`public:${item.action}`).setLabel(item.label).setEmoji(item.emoji).setStyle(ButtonStyle.Secondary)
+    ));
+    components.push(row);
+  }
   const panelEmbed = new EmbedBuilder()
     .setColor(CYAN)
     .setTitle(main.title || `مرحباً بك في ${guild.name}`)
     .setDescription(String(main.body || '').slice(0, 4096))
     .setImage('attachment://dos-main-panel.png')
     .setFooter({ text: signature || `تحيات إدارة ${guild.name}` });
-  return { embeds: [panelEmbed], files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components: [row1, row2] };
+  return { embeds: [panelEmbed], files: [new AttachmentBuilder(image, { name: 'dos-main-panel.png' })], attachments: [], components };
 }
 
 async function publishMainPanel(guild, channel) {
@@ -162,4 +183,4 @@ async function handlePublicPanelInteraction(interaction) {
   return false;
 }
 
-module.exports = { CYAN, DEFAULT_CONTENT, content, makeContentEmbed, buildMainPanel, publishMainPanel, handlePublicPanelInteraction };
+module.exports = { CYAN, DEFAULT_CONTENT, MAIN_PANEL_BUTTONS, selectedMainPanelButtons, content, makeContentEmbed, buildMainPanel, publishMainPanel, handlePublicPanelInteraction };

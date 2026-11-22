@@ -5,7 +5,7 @@ const {
   ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ChannelType, PermissionsBitField, MessageFlags
 } = require('discord.js');
 const database = require('./database');
-const { CYAN, DEFAULT_CONTENT, makeContentEmbed, publishMainPanel } = require('./panels');
+const { CYAN, DEFAULT_CONTENT, MAIN_PANEL_BUTTONS, selectedMainPanelButtons, makeContentEmbed, publishMainPanel } = require('./panels');
 const { deliverProduct, publishShop, refreshPublishedShop } = require('./shop');
 const { renderAdminDashboard, renderAdminSection } = require('./render');
 
@@ -119,12 +119,26 @@ function shopSettingsPayload(guildId) {
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:back').setLabel('رجوع للمتجر').setStyle(ButtonStyle.Secondary))
   ] }, 'إعداد قنوات المتجر', 'اختر قناة عرض المتجر وتصنيف الغرف الخاصة', 'SHOP');
 }
-function contentAdminPayload() {
+function contentAdminPayload(guildId, notice = '') {
   const editMenu = new StringSelectMenuBuilder().setCustomId('admin:content:choose').setPlaceholder('اختر رسالة لتعديلها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
   const previewMenu = new StringSelectMenuBuilder().setCustomId('admin:content:preview').setPlaceholder('معاينة رسالة قبل اعتمادها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
-  return withSectionImage({ embeds: [adminEmbed('📝 إدارة اللوحات والرسائل', 'اختر الرسالة التي تريد تعديلها. تستطيع تغيير العنوان والنص كاملاً، ثم حفظها؛ وسيظهر التحديث عند ضغط الأعضاء على الزر.\n\nتتضمن الرسائل: الترحيب، القوانين، المعلومات، الرتب، منصات التواصل، التقديم، وآخر التحديثات.')], components: [new ActionRowBuilder().addComponents(editMenu), new ActionRowBuilder().addComponents(previewMenu), new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة الرئيسية').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))] }, 'اللوحات والرسائل', 'تعديل رسائل القوانين والترحيب والمعلومات والأزرار', 'CONTENT');
+  const selected = new Set(guildId ? selectedMainPanelButtons(guildId) : MAIN_PANEL_BUTTONS.map((item) => item.key));
+  const buttonMenu = new StringSelectMenuBuilder().setCustomId('admin:content:buttons')
+    .setPlaceholder('اختر الأزرار التي تريد إظهارها في الترحيب')
+    .setMinValues(0).setMaxValues(MAIN_PANEL_BUTTONS.length)
+    .addOptions(MAIN_PANEL_BUTTONS.map((item) => ({
+      label: item.label, value: item.key, emoji: item.emoji, default: selected.has(item.key),
+      description: `زر ${item.label} في رسالة الترحيب`
+    })));
+  const description = 'اختر الرسالة التي تريد تعديلها. تستطيع تغيير العنوان والنص كاملاً، ثم حفظها.\n\n**أزرار رسالة الترحيب:** اختر من القائمة الثالثة الأزرار التي تريد إظهارها أو إخفاءها. يتحدث منشور الترحيب تلقائياً بعد الحفظ.\n\n' + (notice ? `✅ ${notice}\n\n` : '') + 'الرسائل المتاحة: الترحيب، القوانين، المعلومات، الرتب، منصات التواصل، التقديم، وآخر التحديثات.';
+  return withSectionImage({ embeds: [adminEmbed('📝 إدارة اللوحات والرسائل', description)], components: [
+    new ActionRowBuilder().addComponents(editMenu),
+    new ActionRowBuilder().addComponents(previewMenu),
+    new ActionRowBuilder().addComponents(buttonMenu),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة الرئيسية').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
+  ] }, 'اللوحات والرسائل', 'تعديل القوانين ورسالة الترحيب والتحكم بأزرارها', 'CONTENT');
 }
 function featuresPayload(guildId) {
   const rows = [];
@@ -267,7 +281,7 @@ async function handleAdminInteraction(interaction, client) {
     const section = interaction.values[0];
     const payload = section === 'shop' ? await shopAdminPayload(interaction.guildId)
       : section === 'rooms' ? roomsPayload(interaction.guildId)
-      : section === 'content' ? contentAdminPayload()
+      : section === 'content' ? contentAdminPayload(interaction.guildId)
       : section === 'features' ? featuresPayload(interaction.guildId)
       : section === 'economy' ? economyPayload(interaction.guildId)
       : section === 'member_tools' ? memberToolsPayload()
@@ -413,13 +427,29 @@ async function handleAdminInteraction(interaction, client) {
     database.logAdmin(interaction.guildId,interaction.user.id,'room_closed',`id=${id}`);
     return interaction.update({ content: `تم إغلاق الغرفة #${id}.`, embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:rooms:back').setLabel('العودة للغرف').setStyle(ButtonStyle.Secondary))] });
   }
+  if (parts[1] === 'content' && parts[2] === 'buttons' && interaction.isStringSelectMenu()) {
+    const allowed = new Set(MAIN_PANEL_BUTTONS.map((item) => item.key));
+    const chosen = MAIN_PANEL_BUTTONS.map((item) => item.key).filter((key) => interaction.values.includes(key) && allowed.has(key));
+    database.setConfig(interaction.guildId, 'main_panel_buttons', JSON.stringify(chosen), interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'main_panel_buttons_update', chosen.join(','));
+    let refreshed = false;
+    const settings = database.settings(interaction.guildId);
+    const channel = settings.panel_channel_id ? await interaction.guild.channels.fetch(settings.panel_channel_id).catch(() => null) : null;
+    if (channel && channel.isTextBased()) {
+      try { await publishMainPanel(interaction.guild, channel); refreshed = true; }
+      catch (error) { console.error('[ADMIN] Main panel button refresh failed:', error.message); }
+    }
+    const names = MAIN_PANEL_BUTTONS.filter((item) => chosen.includes(item.key)).map((item) => item.label);
+    const notice = chosen.length ? `تم تحديث الأزرار (${chosen.length}): ${names.join('، ')}.${refreshed ? ' وتم تحديث رسالة الترحيب المنشورة.' : ' انشر اللوحة من الزر أدناه لتطبيقها في القناة.'}` : `تم إخفاء جميع أزرار رسالة الترحيب.${refreshed ? ' وتم تحديث الرسالة المنشورة.' : ' انشر اللوحة من الزر أدناه لتطبيق التغيير.'}`;
+    return interaction.update(contentAdminPayload(interaction.guildId, notice));
+  }
   if (parts[1] === 'content' && parts[2] === 'choose' && interaction.isStringSelectMenu()) return interaction.showModal(contentModal(interaction.values[0],interaction.guildId));
   if (parts[1] === 'content' && parts[2] === 'preview' && interaction.isStringSelectMenu()) {
     const key = interaction.values[0];
     const item = DEFAULT_CONTENT[key];
     return interaction.update(withSectionImage({ embeds: [makeContentEmbed(interaction.guildId,key)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:content:back').setLabel('رجوع لإدارة الرسائل').setStyle(ButtonStyle.Secondary))] }, item ? item.title : 'معاينة الرسالة', 'هذه معاينة للنص المحفوظ قبل النشر', 'PREVIEW'));
   }
-  if (parts[1] === 'content' && parts[2] === 'back') return interaction.update(contentAdminPayload());
+  if (parts[1] === 'content' && parts[2] === 'back') return interaction.update(contentAdminPayload(interaction.guildId));
   if (parts[1] === 'panel' && parts[2] === 'publish') {
     return interaction.update(withSectionImage({ embeds: [adminEmbed('📌 نشر اللوحة الرئيسية', 'اختر القناة التي تريد نشر اللوحة فيها. إذا كانت اللوحة موجودة مسبقاً فسيتم تحديثها.')], components: [
       new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:panel:publish-channel').setPlaceholder('اختر قناة اللوحة الرئيسية').setChannelTypes(ChannelType.GuildText)),

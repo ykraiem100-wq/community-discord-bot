@@ -5,7 +5,6 @@ const {
   ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const database = require('./database');
-const { CYAN } = require('./panels');
 const { renderShopHeader, renderColorWheel } = require('./render');
 
 const PAGE_SIZE = 25;
@@ -48,14 +47,10 @@ async function shopPayload(guildOrId, page) {
     if (safePage < maxPage) row.addComponents(new ButtonBuilder().setCustomId('shop:page:' + (safePage + 1)).setLabel('التالي').setStyle(ButtonStyle.Secondary));
     rows.push(row);
   }
+  // The user asked for an image-only storefront: keep only the large artwork
+  // and the actual product selector/navigation controls, with no extra title copy.
   const shopEmbed = new EmbedBuilder()
-    .setColor(CYAN)
-    .setTitle(`CREDITS SHOP • ${guild && guild.name ? guild.name : 'DOS COMMUNITY'}`)
-    .setDescription(current.length
-      ? 'اختر السلعة من قائمة **Buy...** أسفل الصورة. تضيف الإدارة أسماء المنتجات وصورها وأسعارها من لوحة التحكم.'
-      : 'المتجر جاهز، لكن لا توجد منتجات مفعّلة بعد. ستظهر السلع هنا عندما تضيفها الإدارة وتفعّلها.')
-    .setImage('attachment://dos-credits-shop.png')
-    .setFooter({ text: 'DOS COMMUNITY • Colors • Custom Roles • Items' });
+    .setImage('attachment://dos-credits-shop.png');
   return {
     embeds: [shopEmbed],
     files: [new AttachmentBuilder(image, { name: 'dos-credits-shop.png' })],
