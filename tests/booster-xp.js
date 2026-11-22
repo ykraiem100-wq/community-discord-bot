@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { getBoosterMultiplier, applyXpMultiplier, normalizeBoosterMultiplier } = require('../src/booster-xp');
+const mkMember = ({ premiumSince = null, roles = [] } = {}) => ({ premiumSince, roles: { cache: { has: (id) => roles.includes(id) } } });
+assert.equal(normalizeBoosterMultiplier('1.5'), 1.5);
+assert.equal(normalizeBoosterMultiplier('9'), 1.5);
+assert.equal(getBoosterMultiplier(mkMember(), '', '1.5'), 1);
+assert.equal(getBoosterMultiplier(mkMember({ premiumSince: new Date(), roles: ['boost'] }), 'boost', '1.5'), 1.5);
+assert.equal(getBoosterMultiplier(mkMember({ premiumSince: new Date(), roles: [] }), 'boost', '1.5'), 1);
+assert.equal(getBoosterMultiplier(mkMember({ premiumSince: new Date(), roles: ['boost'] }), 'boost', '2'), 2);
+assert.equal(applyXpMultiplier(7, 1.5), 11);
+assert.equal(applyXpMultiplier(9, 1.5), 14);
+assert.equal(applyXpMultiplier(10, 1), 10);
+console.log('Booster XP multiplier tests passed.');

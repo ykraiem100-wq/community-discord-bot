@@ -5,13 +5,13 @@ const path = require('node:path');
 const {
   renderWallet, renderTopLeaderboard, renderShopGrid, renderPanelPage,
   renderMainPanel, renderLevelSystemPage, renderLevelUpBanner, renderAdminDashboard, renderAdminShop,
-  renderShopHeader, renderColorWheel, renderAdminSection, TEMPLATE_DIR
+  renderShopHeader, renderColorWheel, renderAdminSection, renderMemberWelcomeCard, TEMPLATE_DIR
 } = require('../src/render');
 
 async function main() {
   for (const filename of [
     'wallet-base.png', 'leaderboard-base.png', 'shop-base.png', 'main-panel-base.png',
-    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png', 'shop-crest-bg.png'
+    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png', 'shop-crest-bg.png', 'member-welcome-base.png'
   ]) {
     assert.ok(fs.existsSync(path.join(TEMPLATE_DIR, filename)), `missing current template ${filename}`);
   }
@@ -30,6 +30,7 @@ async function main() {
     await renderAdminShop([{ name: 'لون خاص', price: 200, currency: 'coin', active: true }]),
     await renderShopHeader(),
     renderColorWheel(),
+    await renderMemberWelcomeCard({ user, guild: { name: 'DOS COMMUNITY' } }),
     renderAdminSection({ title: 'إدارة العملات', subtitle: 'اختبار صورة الأمر', emblem: 'XP' })
   ];
   for (const [index, image] of outputs.entries()) {
