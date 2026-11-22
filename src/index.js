@@ -10,6 +10,8 @@ const { renderTopLeaderboard, renderLevelUpBanner, renderAdminSection } = requir
 const { shopPayload, handleShopInteraction, handleShopModal, processRoomExpirations, colorPickerPayload } = require('./shop');
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
 const { sendJoinWelcome, getJoinWelcomeConfig, parseButtonEmoji } = require('./join-welcome');
+const { sendMemberWelcomeCard } = require('./member-welcome');
+const { getBoosterMultiplier, applyXpMultiplier } = require('./booster-xp');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
 
 const token = (process.env.DISCORD_TOKEN || '').trim();
@@ -181,15 +183,16 @@ async function awardVoice(guildId,userId) {
   const elapsedMinutes = Math.floor((Date.now()-session.started_at)/60000);
   if (elapsedMinutes < 1) return;
   const voiceRate = Number(database.getConfig(guildId,'voice_xp','9'));
-  const amount = elapsedMinutes * voiceRate;
+  const guild = client.guilds.cache.get(guildId);
+  let member = guild && guild.members.cache.get(userId);
+  if (!member && guild) member = await guild.members.fetch(userId).catch(() => null);
+  const multiplier = getBoosterMultiplier(member, database.getConfig(guildId, 'booster_role_id', ''), database.getConfig(guildId, 'booster_xp_multiplier', '1.5'));
+  const amount = applyXpMultiplier(elapsedMinutes * voiceRate, multiplier);
   const result = database.addXp(guildId,userId,'voice',amount,{seconds:elapsedMinutes*60,
     awardXp:database.featureEnabled(guildId,'levels'), awardCoins:database.featureEnabled(guildId,'economy'),
     xpPerCoin:Number(database.getConfig(guildId,'xp_per_coin','250'))});
   database.updateVoice(guildId,userId,session.started_at+elapsedMinutes*60000);
   if (database.featureEnabled(guildId,'levels') && result.newVoiceLevel > result.oldVoiceLevel) {
-    const guild = client.guilds.cache.get(guildId);
-    let member = guild && guild.members.cache.get(userId);
-    if (!member && guild) member = await guild.members.fetch(userId).catch(() => null);
     await assignLevelRole(member,'voice',result.newVoiceLevel);
     if (member && guild) await sendConfiguredLevelUpNotice(guild, guild.systemChannel, member.user, result.newVoiceLevel);
   }
@@ -437,7 +440,10 @@ client.on('inviteDelete', (invite) => {
 });
 client.on('guildMemberAdd', (member) => {
   trackInviteJoin(member).catch((error) => console.error('[INVITES] Join tracking failed:', error));
-  sendJoinWelcome(member).catch((error) => console.error('[WELCOME] New member message failed:', error));
+  // Keep the original small -# join line first, then post the new DOS welcome card.
+  sendJoinWelcome(member)
+    .catch((error) => console.error('[WELCOME] Small join message failed:', error))
+    .finally(() => sendMemberWelcomeCard(member).catch((error) => console.error('[WELCOME] Member card failed:', error)));
 });
 
 client.on('messageCreate',async (message) => {
@@ -450,7 +456,9 @@ client.on('messageCreate',async (message) => {
   if (trimmed.startsWith(prefix)) return handleCommand(message);
   try {
     const guildId = message.guild.id;
-    const rate = Number(database.getConfig(guildId,'message_xp','7'));
+    const baseRate = Number(database.getConfig(guildId,'message_xp','7'));
+    const multiplier = getBoosterMultiplier(message.member, database.getConfig(guildId, 'booster_role_id', ''), database.getConfig(guildId, 'booster_xp_multiplier', '1.5'));
+    const rate = applyXpMultiplier(baseRate, multiplier);
     const awardXp = database.featureEnabled(guildId,'levels');
     const awardCoins = database.featureEnabled(guildId,'economy');
     const result = database.addXp(guildId,message.author.id,'text',rate,{message:true,awardXp,awardCoins,xpPerCoin:Number(database.getConfig(guildId,'xp_per_coin','250'))});

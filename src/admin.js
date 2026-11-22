@@ -60,6 +60,8 @@ async function homePayload(guildOrId) {
       { label: 'الغرف الخاصة', value: 'rooms', description: 'متابعة الغرف ومددها وتجديدها وإغلاقها', emoji: '🏠' },
       { label: 'اللوحات والرسائل', value: 'content', description: 'تعديل القوانين والمعلومات والرسائل', emoji: '📝' },
       { label: 'ترحيب الأعضاء الجدد', value: 'join_welcome', description: 'رسالة صغيرة عند دخول عضو جديد وتحديد الروم والإيموجي', emoji: '👋' },
+      { label: 'بطاقة ترحيب بصورة', value: 'welcome_card', description: 'تصميم ترحيب DOS مع منشن العضو وعدد الأعضاء', emoji: '🖼️' },
+      { label: 'مكافأة بوست السيرفر', value: 'boost_xp', description: 'مضاعف XP لأعضاء بوست السيرفر وتحديد رتبة البوست', emoji: '🚀' },
       { label: 'تشغيل وإيقاف الأنظمة', value: 'features', description: 'إيقاف أو تشغيل كل نظام', emoji: '⏯️' },
       { label: 'العملات والمستويات', value: 'economy', description: 'تعديل XP والتحويل ومتطلبات المستويات وقناة الإشعارات', emoji: '📈' },
       { label: 'أوامر إدارة الأعضاء', value: 'member_tools', description: 'إضافة عملات وXP وإعادة ضبط عضو مع تأكيد', emoji: '🛠️' },
@@ -209,6 +211,56 @@ function joinWelcomePayload(guildId, notice = '') {
   return withSectionImage({ embeds: [adminEmbed('👋 ترحيب الأعضاء الجدد', description)], components: rows }, 'ترحيب الأعضاء الجدد', 'إعداد رسالة صغيرة تلقائية عند دخول عضو جديد', 'WELCOME');
 }
 
+function memberWelcomeCardPayload(guildId, notice = '') {
+  const enabled = database.getConfig(guildId, 'member_welcome_enabled', '1') !== '0';
+  const channelId = database.getConfig(guildId, 'member_welcome_channel_id', '') || database.getConfig(guildId, 'join_welcome_channel_id', '') || database.settings(guildId).welcome_channel_id || '';
+  const template = database.getConfig(guildId, 'member_welcome_text', 'أهلاً وسهلاً {user} في **{server}**! 💎\nنتمنى لك وقتاً ممتعاً معنا. أنت العضو رقم **{memberCount}** في مجتمعنا.');
+  const preview = String(template).replace(/\{user\}/g, '@NewMember').replace(/\{username\}/g, 'NewMember').replace(/\{server\}/g, 'DOS COMMUNITY').replace(/\{memberCount\}|\{count\}|\{members\}/g, '1,250');
+  const description = [
+    `**الحالة:** ${enabled ? '🟢 مفعّلة' : '🔴 متوقفة'}`,
+    `**قناة الإرسال:** ${channelId ? `<#${channelId}>` : 'الشات العام تلقائياً'}`,
+    '',
+    '**معاينة النص:**', preview,
+    '',
+    'المتغيرات: `{user}` منشن العضو، `{username}` اسم العضو، `{server}` اسم السيرفر، `{memberCount}` عدد الأعضاء.',
+    'تظهر البطاقة بصورة DOS السماوية، بينما يبقى النص في الرسالة واضحاً وقابلاً للنسخ.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  return withSectionImage({ embeds: [adminEmbed('🖼️ بطاقة ترحيب DOS', description)], components: [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:welcome-card:edit').setLabel('تعديل رسالة الترحيب').setEmoji('✏️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:welcome-card:toggle').setLabel(enabled ? 'إيقاف البطاقة' : 'تفعيل البطاقة').setEmoji(enabled ? '⏸️' : '▶️').setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin:welcome-card:test').setLabel('تجربة البطاقة').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:welcome-card:channel').setPlaceholder('اختر قناة ترحيب البطاقة').setChannelTypes(ChannelType.GuildText)),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:welcome-card:clear-channel').setLabel('استخدام الشات العام تلقائياً').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ] }, 'بطاقة ترحيب DOS', 'صورة ترحيب جديدة قابلة للتعديل مع المنشن وعدد الأعضاء', 'WELCOME');
+}
+
+function boosterXpPayload(guildId, notice = '') {
+  const roleId = database.getConfig(guildId, 'booster_role_id', '');
+  const multiplier = database.getConfig(guildId, 'booster_xp_multiplier', '1.5');
+  const description = [
+    `**مضاعف XP الحالي:** ×${multiplier}`,
+    `**رتبة البوست:** ${roleId ? `<@&${roleId}>` : 'غير محددة — يُحتسب لأي عضو لديه حالة Server Boost نشطة'}`,
+    '',
+    'يجب أن يكون العضو يقوم ببوست فعلياً للسيرفر (Server Booster). وعند تحديد رتبة، يجب أن يحملها أيضاً حتى يحصل على المضاعف.',
+    'تُطبّق النسبة على XP الرسائل والصوت، ويُحسب تحويل DOS Coin من XP بعد المضاعفة. لا تتغير مكافآت XP الإدارية اليدوية.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  return withSectionImage({ embeds: [adminEmbed('🚀 مضاعف XP للبوستر', description)], components: [
+    new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId('admin:boost-xp:role').setPlaceholder('اختيار رتبة البوست').setMinValues(1).setMaxValues(1)),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:boost-xp:edit').setLabel('تعديل نسبة XP').setEmoji('⚙️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:boost-xp:clear-role').setLabel('إلغاء شرط الرتبة').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ] }, 'مكافأة بوست السيرفر', 'زيادة خبرة الأعضاء الداعمين للسيرفر', 'BOOST');
+}
+
 function featuresPayload(guildId) {
   const rows = [];
   for (let i = 0; i < FEATURES.length; i += 4) {
@@ -352,6 +404,8 @@ async function handleAdminInteraction(interaction, client) {
       : section === 'rooms' ? roomsPayload(interaction.guildId)
       : section === 'content' ? contentAdminPayload(interaction.guildId)
       : section === 'join_welcome' ? joinWelcomePayload(interaction.guildId)
+      : section === 'welcome_card' ? memberWelcomeCardPayload(interaction.guildId)
+      : section === 'boost_xp' ? boosterXpPayload(interaction.guildId)
       : section === 'features' ? featuresPayload(interaction.guildId)
       : section === 'economy' ? economyPayload(interaction.guildId)
       : section === 'member_tools' ? memberToolsPayload()
@@ -399,6 +453,60 @@ async function handleAdminInteraction(interaction, client) {
       return interaction.reply({ content: 'تعذّر إرسال التجربة: ' + error.message, flags: MessageFlags.Ephemeral });
     }
   }
+  if (parts[1] === 'welcome-card' && parts[2] === 'edit') {
+    const current = database.getConfig(interaction.guildId, 'member_welcome_text', 'أهلاً وسهلاً {user} في **{server}**! 💎\nنتمنى لك وقتاً ممتعاً معنا. أنت العضو رقم **{memberCount}** في مجتمعنا.');
+    const modal = new ModalBuilder().setCustomId('admin:welcome-card:save').setTitle('تعديل رسالة ترحيب DOS')
+      .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('template').setLabel('رسالة الترحيب — استخدم المتغيرات المعروضة').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1800).setValue(String(current).slice(0,1800))));
+    return interaction.showModal(modal);
+  }
+  if (parts[1] === 'welcome-card' && parts[2] === 'toggle') {
+    const enabled = database.getConfig(interaction.guildId, 'member_welcome_enabled', '1') !== '0';
+    database.setConfig(interaction.guildId, 'member_welcome_enabled', enabled ? '0' : '1', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'member_welcome_toggle', String(!enabled));
+    return interaction.update(memberWelcomeCardPayload(interaction.guildId, enabled ? 'تم إيقاف بطاقة الترحيب.' : 'تم تفعيل بطاقة الترحيب.'));
+  }
+  if (parts[1] === 'welcome-card' && parts[2] === 'channel' && interaction.isChannelSelectMenu()) {
+    const channelId = interaction.values[0];
+    database.setConfig(interaction.guildId, 'member_welcome_channel_id', channelId, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'member_welcome_channel', channelId);
+    return interaction.update(memberWelcomeCardPayload(interaction.guildId, `تم تحديد قناة الترحيب: <#${channelId}>.`));
+  }
+  if (parts[1] === 'welcome-card' && parts[2] === 'clear-channel') {
+    database.setConfig(interaction.guildId, 'member_welcome_channel_id', '', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'member_welcome_channel', 'auto');
+    return interaction.update(memberWelcomeCardPayload(interaction.guildId, 'سيستخدم البوت قناة الشات العام تلقائياً.'));
+  }
+  if (parts[1] === 'welcome-card' && parts[2] === 'test') {
+    const { sendMemberWelcomeCard } = require('./member-welcome');
+    try {
+      const testMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+      const message = testMember ? await sendMemberWelcomeCard(testMember, { test: true }) : null;
+      if (!message) return interaction.reply({ content: 'تعذر إرسال التجربة. تحقق من القناة وصلاحيات View Channel وSend Messages وAttach Files.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: `✅ تم إرسال بطاقة الترحيب التجريبية في ${message.channel}.`, flags: MessageFlags.Ephemeral });
+    } catch (error) {
+      console.error('[ADMIN] Member welcome card test failed:', error);
+      return interaction.reply({ content: 'تعذر إرسال التجربة: ' + error.message, flags: MessageFlags.Ephemeral });
+    }
+  }
+  if (parts[1] === 'boost-xp' && parts[2] === 'role' && interaction.isRoleSelectMenu()) {
+    const role = interaction.roles.first();
+    if (!role || role.id === interaction.guildId) return interaction.reply({ content: 'اختر رتبة بوست عادية، ولا تختَر @everyone.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'booster_role_id', role.id, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'booster_role_set', role.id);
+    return interaction.update(boosterXpPayload(interaction.guildId, `تم تعيين ${role} كرتبة البوست المطلوبة.`));
+  }
+  if (parts[1] === 'boost-xp' && parts[2] === 'clear-role') {
+    database.setConfig(interaction.guildId, 'booster_role_id', '', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'booster_role_clear', '');
+    return interaction.update(boosterXpPayload(interaction.guildId, 'تم إلغاء شرط الرتبة؛ سيكفي وجود Server Boost نشط.'));
+  }
+  if (parts[1] === 'boost-xp' && parts[2] === 'edit') {
+    const current = database.getConfig(interaction.guildId, 'booster_xp_multiplier', '1.5');
+    const modal = new ModalBuilder().setCustomId('admin:boost-xp:save').setTitle('تعديل مضاعف XP للبوستر')
+      .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('multiplier').setLabel('المضاعف (مثال 1.5 أو 2)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(5).setValue(String(current))));
+    return interaction.showModal(modal);
+  }
+
   if (parts[1] === 'member-reset' && ['confirm','cancel'].includes(parts[2])) {
     const targetId = parts[3];
     const actorId = parts[4];
@@ -654,6 +762,23 @@ async function handleAdminModal(interaction) {
     database.logAdmin(interaction.guildId, interaction.user.id, 'join_welcome_update', JSON.stringify({ template, emoji }));
     return interaction.reply({ content: '✅ تم حفظ نص وإيموجي الترحيب. سيُستخدمان مع كل عضو جديد يدخل السيرفر.', flags: MessageFlags.Ephemeral });
   }
+  if (parts[1] === 'welcome-card' && parts[2] === 'save') {
+    const template = interaction.fields.getTextInputValue('template').trim().slice(0,1800);
+    if (!template || template.length > 1800) return interaction.reply({ content: 'اكتب رسالة ترحيب لا تتجاوز 1800 حرف.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'member_welcome_text', template, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'member_welcome_text_update', template);
+    return interaction.reply({ content: '✅ تم حفظ رسالة الترحيب المصوّرة. ستُستخدم مع الأعضاء الجدد.', flags: MessageFlags.Ephemeral });
+  }
+  if (parts[1] === 'boost-xp' && parts[2] === 'save') {
+    const raw = interaction.fields.getTextInputValue('multiplier').trim();
+    const multiplier = Number(raw);
+    if (!Number.isFinite(multiplier) || multiplier < 1 || multiplier > 5 || Math.abs(multiplier * 100 - Math.round(multiplier * 100)) > 1e-8) {
+      return interaction.reply({ content: 'أدخل مضاعفاً بين 1 و5 وبحد أقصى منزلتين عشريتين، مثل 1.5 أو 2.', flags: MessageFlags.Ephemeral });
+    }
+    database.setConfig(interaction.guildId, 'booster_xp_multiplier', multiplier.toFixed(2).replace(/0+$/, '').replace(/\.$/, ''), interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'booster_xp_multiplier_update', String(multiplier));
+    return interaction.reply({ content: `✅ تم حفظ مضاعف XP للبوستر: ×${multiplier}. سيُطبق على XP الرسائل والصوت ابتداءً من المكاسب القادمة.`, flags: MessageFlags.Ephemeral });
+  }
   if (parts[1] === 'level-role' && parts[2] === 'save') {
     const kind = parts[3] === 'voice' ? 'voice' : parts[3] === 'write' ? 'text' : null;
     const level = Number(interaction.fields.getTextInputValue('level'));
@@ -729,4 +854,4 @@ async function handleAdminModal(interaction) {
   return false;
 }
 
-module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, adminAccessPayload, contentAdminPayload, joinWelcomePayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };
+module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, adminAccessPayload, contentAdminPayload, joinWelcomePayload, memberWelcomeCardPayload, boosterXpPayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };

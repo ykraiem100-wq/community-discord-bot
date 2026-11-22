@@ -174,16 +174,8 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
   const avatarUrl = user && typeof user.displayAvatarURL === 'function'
     ? user.displayAvatarURL({ extension: 'png', size: 512 }) : null;
   const avatar = await loadSafeImage(avatarUrl);
-  ctx.save();
-  roundedClip(ctx, 43, 53, 119, 113, 54);
-  if (avatar) ctx.drawImage(avatar, 43, 53, 119, 113);
-  else {
-    const fallback = ctx.createLinearGradient(43, 53, 162, 166);
-    fallback.addColorStop(0, '#1A6480'); fallback.addColorStop(1, '#07121E');
-    ctx.fillStyle = fallback; ctx.fillRect(43, 53, 119, 113);
-    drawText(ctx, 'DOS', 102, 112, 25, C.silver, 900, 'center', 90);
-  }
-  ctx.restore();
+  // Clip the profile photo to a mathematically perfect circle (not a rounded square).
+  drawCircleImage(ctx, avatar, 46, 53, 113, '#63DDF5', 1.8);
 
   const name = displayName || (user && (user.globalName || user.username)) || 'عضو DOS';
   drawText(ctx, name.startsWith('@') ? name : '@' + name, 210, 92, 17, C.white, 900, 'left', 235);
@@ -204,6 +196,21 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
     { x: 498, value: formatNumber(profile.invites), color: C.silver }
   ];
   metrics.forEach((metric) => drawText(ctx, metric.value, metric.x, 277, 17, metric.color, 900, 'center', 126));
+  return canvas.toBuffer('image/png');
+}
+
+
+// Cyan DOS member welcome artwork. All editable copy stays in the Discord embed
+// so Arabic text and member mentions remain crisp and selectable.
+async function renderMemberWelcomeCard({ user = null, guild = null } = {}) {
+  const bg = await loadTemplate('member-welcome-base.png');
+  const { canvas, ctx } = scaleCanvas(bg, 1);
+  const avatarUrl = user && typeof user.displayAvatarURL === 'function'
+    ? user.displayAvatarURL({ extension: 'png', size: 512 }) : null;
+  const avatar = await loadSafeImage(avatarUrl);
+  drawCircleImage(ctx, avatar, 84, 177, 520, '#55DDF5', 8);
+  const logo = await loadTemplate('dos-community-logo.png');
+  drawBrandLogo(ctx, logo, 1514, 407, 168, '#55DDF5');
   return canvas.toBuffer('image/png');
 }
 
@@ -573,6 +580,7 @@ async function renderAdminShop() {
 
 module.exports = {
   renderWallet,
+  renderMemberWelcomeCard,
   renderTopLeaderboard,
   renderShopGrid,
   renderMainPanel,
