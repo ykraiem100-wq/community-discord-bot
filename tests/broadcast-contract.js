@@ -14,9 +14,8 @@ const render = read('src/render.js');
 const daily = read('src/daily-questions.js');
 const tasks = read('src/tasks.js');
 
-// The wallet shortcut is the documented command only; a bare "r" is ordinary chat.
-assert.doesNotMatch(index, /\^r\(\?:\\s\+<@!\?\\d\+>\)\?\$/i);
-assert.doesNotMatch(index, /trimmed\s*===?\s*['"]r['"]/i);
+// The exact bare letter r is a wallet shortcut, handled before question/task/XP processing.
+assert.ok(index.includes('if (/^r$/i.test(trimmed))'), 'plain r must open the wallet');
 assert.match(index, /if \(trimmed\.startsWith\(prefix\)\) return handleCommand\(message\)/);
 
 // Every known prefix and slash command category has a corresponding admin toggle.
@@ -34,10 +33,11 @@ assert.match(welcome, /files: \[new AttachmentBuilder/);
 assert.doesNotMatch(welcome, /EmbedBuilder/);
 const walletCall = render.match(/drawCircleImage\(ctx, avatar, (\d+), (\d+), (\d+), '#C8F4FF'/);
 assert.ok(walletCall, 'wallet avatar must be drawn into the round portrait aperture');
-assert.equal(Number(walletCall[3]), 108, 'wallet avatar must fill the portrait opening');
+assert.equal(Number(walletCall[3]), 96, 'wallet avatar must fill the portrait opening');
 const welcomeRenderer = render.match(/async function renderMemberWelcomeCard\([\s\S]*?\n}\n/);
 assert.ok(welcomeRenderer);
-assert.doesNotMatch(welcomeRenderer[0], /drawText\(/, 'welcome artwork must stay free of baked wording');
+assert.match(welcomeRenderer[0], /Welcome To/, 'welcome artwork must include its cyan brand text');
+assert.match(welcomeRenderer[0], /『DOS』/, 'welcome artwork must include the DOS wordmark');
 
 // DM broadcasts are explicitly consent-based and throttled.
 assert.match(index, /dm-notifications/);
@@ -59,4 +59,4 @@ assert.match(admin, /task_reward_message_template/);
 assert.match(daily, /fillQuestionTemplate/);
 assert.match(tasks, /task_reward_message_template/);
 
-console.log('Broadcast opt-in, command toggles, bare-r removal, editable message and image-only welcome contracts passed.');
+console.log('Broadcast opt-in, command toggles, bare-r wallet shortcut, editable message and image-only welcome contracts passed.');
