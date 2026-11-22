@@ -50,6 +50,9 @@ try {
   assert.equal(db.closeRoom(roomId),true);
   assert.equal(db.activeRooms(guild).some((room)=>room.id===roomId),false);
 
+  db.setConfig(guild,'main_panel_buttons',JSON.stringify(['rules','roles','arena']),'admin');
+  assert.equal(db.getConfig(guild,'main_panel_buttons','[]'),JSON.stringify(['rules','roles','arena']));
+
   db.setConfig(guild,'message_xp',11,'admin');
   db.setConfig(guild,'level_first_six','100,150,250,400,500,600','admin');
   assert.equal(db.getConfig(guild,'message_xp','7'),'11');
