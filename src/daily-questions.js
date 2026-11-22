@@ -22,6 +22,9 @@ function chooseQuestion(lastKey = '') {
   const pool = available.length ? available : QUESTIONS;
   return pool[randomInt(0, pool.length - 1)];
 }
+function fillQuestionTemplate(template, values) {
+  return String(template || '').replace(/\{(question|reward|user|server)\}/g, (match, key) => String(values[key] ?? match));
+}
 
 async function tickDailyQuestions(client, nowMs = Date.now()) {
   for (const guild of client.guilds.cache.values()) {
@@ -69,12 +72,26 @@ async function tickDailyQuestions(client, nowMs = Date.now()) {
       run = database.dailyQuestionForDate(guildId, dateKey);
     }
     if (!run) {
-      const lastKey = database.getConfig(guildId, 'daily_question_last_key', '');
-      [key, question] = chooseQuestion(lastKey);
-      const answer = QUESTIONS.find((item) => item[0] === key)?.[2] || '';
+      let answer = '';
+      const customQuestion = String(database.getConfig(guildId, 'daily_question_custom_question', '') || '').trim();
+      const customAnswer = String(database.getConfig(guildId, 'daily_question_custom_answer', '') || '').trim();
+      if (customQuestion && customAnswer) {
+        key = 'admin-custom';
+        question = customQuestion;
+        answer = customAnswer;
+      } else {
+        const lastKey = database.getConfig(guildId, 'daily_question_last_key', '');
+        [key, question] = chooseQuestion(lastKey);
+        answer = QUESTIONS.find((item) => item[0] === key)?.[2] || '';
+      }
       reward = Math.max(1, Math.min(100000, Math.floor(Number(database.getConfig(guildId, 'daily_question_reward', '1')) || 1)));
       runId = database.createDailyQuestionRun({ guildId, dateKey, channelId, questionKey: key, question, answer, rewardCoins: reward, scheduledAt: nextAt });
       run = runId ? database.dailyQuestionForDate(guildId, dateKey) : null;
+      if (runId && key === 'admin-custom') {
+        // Consume the custom pair only after SQLite confirms the run was saved.
+        database.setConfig(guildId, 'daily_question_custom_question', '', 'scheduler');
+        database.setConfig(guildId, 'daily_question_custom_answer', '', 'scheduler');
+      }
     }
     if (!run || !runId && run.status !== 'pending') continue;
     runId = run.id;
@@ -82,8 +99,11 @@ async function tickDailyQuestions(client, nowMs = Date.now()) {
     question = run.question_text;
     reward = Number(run.reward_coins);
     try {
-      const embed = new EmbedBuilder().setColor(0x55DDF5).setTitle('💎 سؤال DOS اليومي')
-        .setDescription(`**${question}**\n\n🏆 أول إجابة صحيحة تحصل على **${reward.toLocaleString('en-US')} DOS Coin**.\nاكتب إجابتك مباشرة في هذه القناة.`)
+      const title = database.getConfig(guildId, 'daily_question_title', '💎 سؤال DOS اليومي');
+      const bodyTemplate = database.getConfig(guildId, 'daily_question_message_template', '**{question}**\n\n🏆 أول إجابة صحيحة تحصل على **{reward} DOS Coin**.\nاكتب إجابتك مباشرة في هذه القناة.');
+      const body = fillQuestionTemplate(bodyTemplate, { question, reward: reward.toLocaleString('en-US'), server: guild.name });
+      const embed = new EmbedBuilder().setColor(0x55DDF5).setTitle(title)
+        .setDescription(body.slice(0,4096))
         .setFooter({ text: 'DOS COMMUNITY • Daily Challenge' }).setTimestamp();
       const sent = await channel.send({ embeds: [embed] });
       database.setDailyQuestionSent(runId, sent.id);
@@ -106,8 +126,13 @@ async function checkDailyQuestionAnswer(message) {
   if (!run || run.channel_id !== message.channel.id || !answerMatches(message.content, run.answer_text)) return false;
   if (!database.winDailyQuestion(run.id, message.author.id)) return true;
   database.addCoins(message.guild.id, message.author.id, Number(run.reward_coins));
-  const embed = new EmbedBuilder().setColor(0x55DDF5).setTitle('🏆 إجابة صحيحة!')
-    .setDescription(`مبروك <@${message.author.id}>! كنت أول من أجاب إجابة صحيحة.\n\nحصلت على **${Number(run.reward_coins).toLocaleString('en-US')} DOS Coin** 💎`)
+  const title = database.getConfig(message.guild.id, 'daily_question_winner_title', '🏆 إجابة صحيحة!');
+  const winnerTemplate = database.getConfig(message.guild.id, 'daily_question_winner_template', 'مبروك {user}! كنت أول من أجاب إجابة صحيحة.\n\nحصلت على **{reward} DOS Coin** 💎');
+  const description = fillQuestionTemplate(winnerTemplate, {
+    user: `<@${message.author.id}>`, reward: Number(run.reward_coins).toLocaleString('en-US'), server: message.guild.name
+  });
+  const embed = new EmbedBuilder().setColor(0x55DDF5).setTitle(title)
+    .setDescription(description.slice(0,4096))
     .setFooter({ text: 'DOS COMMUNITY • Daily Challenge' });
   await message.channel.send({ embeds: [embed], allowedMentions: { users: [message.author.id] } }).catch(() => {});
   return true;
@@ -124,5 +149,5 @@ function questionSettingsPayload(guildId) {
 
 module.exports = {
   QUESTIONS, normalizeAnswer, answerMatches, nextRandomSchedule, dateKeyAt,
-  tickDailyQuestions, checkDailyQuestionAnswer, questionSettingsPayload
+  tickDailyQuestions, checkDailyQuestionAnswer, questionSettingsPayload, fillQuestionTemplate
 };

@@ -16,6 +16,28 @@ const FEATURES = [
   ['top', 'TOP والمتصدرون'], ['main_panel', 'اللوحة الرئيسية'],
   ['interaction_roles', 'رتب التفاعل'], ['events', 'الفعاليات']
 ];
+const COMMAND_CONTROLS = [
+  ['help', 'المساعدة والأوامر', 'مساعدة / أوامر'],
+  ['wallet', 'المحفظة', '/wallet و .محفظتي'],
+  ['tasks', 'مهامي', '.مهامي'],
+  ['invites', 'دعواتي', '.دعواتي'],
+  ['invite_link', 'رابط الدعوة', '.رابط'],
+  ['top', 'المتصدرون', '/top و TOP'],
+  ['stats', 'إحصائيات السيرفر', '.إحصائيات'],
+  ['shop', 'المتجر', '/shop و .المتجر'],
+  ['orders', 'طلبات المتجر', '.طلبات'],
+  ['order_review', 'قبول ورفض الطلبات', '.قبول و .رفض'],
+  ['add_coins', 'إضافة العملات', '/add-coins و .اضافة_عملات'],
+  ['add_xp', 'إضافة XP', '/add-xp و .اضافة_xp'],
+  ['reset_member', 'إعادة ضبط عضو', '/reset-member و .reset'],
+  ['set_channel', 'تعيين القنوات', '.تعيين_قناة'],
+  ['level_role', 'رتب المستويات', '.رتبة_مستوى'],
+  ['color_selection', 'استكمال اختيار اللون', '/color-selection'],
+  ['admin_panel', 'لوحة الإدارة', '/admin-panel'],
+  ['dm_notifications', 'اشتراك إعلانات الخاص', '/dm-notifications'],
+  ['dm_announcement', 'الإعلان الخاص الجماعي', '/dm-announcement'],
+  ['dm_announcement_status', 'حالة الإعلان الخاص', '/dm-announcement-status']
+];
 const CONTENT_KEYS = [
   ['main', 'اللوحة الرئيسية'], ['rules', 'قوانين السيرفر'], ['info', 'معلومات السيرفر'],
   ['notifications', 'رتب التفاعل'], ['system', 'نظام السيرفر'], ['events', 'الفعاليات'],
@@ -62,6 +84,7 @@ async function homePayload(guildOrId) {
       { label: '❓ سؤال اليوم العشوائي', value: 'daily_questions', description: '110+ سؤالاً، توقيت عشوائي يومياً، وجائزة أول إجابة' },
       { label: '🎯 المهام اليومية والأسبوعية', value: 'tasks', description: 'إنشاء مهام وتحديد الجوائز وعدد الفائزين ومراجعة الإثباتات' },
       { label: '🎟️ مكافآت الدعوات', value: 'invite_rewards', description: 'حدد XP أو عملات لكل عضو يدخل من دعوة مسجلة' },
+      { label: '📨 إعلانات الخاص للمشتركين', value: 'broadcast', description: 'إحصائيات الاشتراك وحالة الحملات الخاصة' },
       { label: '📈 العملات والمستويات', value: 'economy', description: 'تعديل XP والتحويل ومتطلبات المستويات وقناة الإشعارات' },
       { label: '🛍️ إدارة المتجر', value: 'shop', description: 'إضافة المنتجات وتعديلها والطلبات' },
       { label: '🏠 الغرف الخاصة', value: 'rooms', description: 'متابعة الغرف ومددها وتجديدها وإغلاقها' },
@@ -69,6 +92,7 @@ async function homePayload(guildOrId) {
       { label: '👋 ترحيب الأعضاء الجدد', value: 'join_welcome', description: 'رسالة صغيرة عند دخول عضو جديد وتحديد الروم والإيموجي' },
       { label: '🖼️ بطاقة ترحيب بصورة', value: 'welcome_card', description: 'تصميم ترحيب DOS مع منشن العضو وعدد الأعضاء' },
       { label: '⏯️ تشغيل وإيقاف الأنظمة', value: 'features', description: 'إيقاف أو تشغيل كل نظام' },
+      { label: '🎛️ تشغيل وإيقاف كل أمر', value: 'commands', description: 'تفعيل أو تعطيل أوامر البوت واحداً واحداً' },
       { label: '🛠️ أوامر إدارة الأعضاء', value: 'member_tools', description: 'إضافة عملات وXP وإعادة ضبط عضو مع تأكيد' },
       { label: '🔔 رتب التفاعل', value: 'roles', description: 'تحديد رتب الإشعارات' },
       { label: '🏅 رتب المستويات', value: 'level_roles', description: 'ربط رتب بمستويات الكتابة والصوت' },
@@ -279,6 +303,55 @@ function featuresPayload(guildId) {
   rows.push(new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)));
   return withSectionImage({ embeds: [adminEmbed('⏯️ تشغيل وإيقاف الأنظمة', 'كل زر يتحكم بنظام مستقل. إيقاف المتجر لا يوقف XP أو المحفظة، وإيقاف الفعاليات لا يؤثر على بقية الأنظمة.')], components: rows }, 'تشغيل وإيقاف الأنظمة', 'تحكم بكل ميزة بشكل مستقل دون تعطيل بقية البوت', 'FEATURES');
 }
+function commandControlsPayload(guildId, selectedKey = 'wallet', notice = '') {
+  const selected = COMMAND_CONTROLS.find(([key]) => key === selectedKey) || COMMAND_CONTROLS[0];
+  const enabled = database.featureEnabled(guildId, `command:${selected[0]}`);
+  const menu = new StringSelectMenuBuilder().setCustomId('admin:commands:select')
+    .setPlaceholder('اختر الأمر الذي تريد تشغيله أو إيقافه')
+    .addOptions(COMMAND_CONTROLS.map(([key,label,usage]) => ({
+      label: `${database.featureEnabled(guildId, `command:${key}`) ? '🟢' : '🔴'} ${label}`.slice(0,100),
+      value: key,
+      description: usage.slice(0,100),
+      default: key === selected[0]
+    })));
+  const description = [
+    `**الأمر المحدد:** ${selected[1]}`,
+    `**طريقة الاستخدام:** ${selected[2]}`,
+    `**الحالة الحالية:** ${enabled ? '🟢 يعمل' : '🔴 متوقف'}`,
+    '',
+    'اختر أي أمر من القائمة ثم اضغط الزر لتشغيله أو إيقافه. ينطبق المفتاح على كل اختصارات الأمر، بما فيها أوامر Slash وPrefix المرتبطة به.',
+    'الرسائل والأزرار التفاعلية الداخلية لا تتوقف إلا إذا كان الأمر الأساسي الذي يفتحها متوقفاً.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  return withSectionImage({ embeds: [adminEmbed('🎛️ تشغيل وإيقاف الأوامر', description)], components: [
+    new ActionRowBuilder().addComponents(menu),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`admin:command-toggle:${selected[0]}`).setLabel(enabled ? 'إيقاف الأمر المحدد' : 'تشغيل الأمر المحدد').setEmoji(enabled ? '⏸️' : '▶️').setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ] }, 'تشغيل وإيقاف الأوامر', 'تحكم مستقل بكل أمر من أوامر DOS COMMUNITY', 'COMMANDS');
+}
+function broadcastAdminPayload(guildId, notice = '') {
+  const subscribers = database.dmAnnouncementSubscriberCount(guildId);
+  const latest = database.latestDmBroadcastJob(guildId);
+  const status = latest
+    ? `**آخر حملة:** #${latest.id} • ${latest.status === 'running' ? 'قيد الإرسال' : latest.status === 'completed' ? 'مكتملة' : 'متوقفة'}\n**المرسل:** ${Number(latest.sent_count).toLocaleString('en-US')}\n**فشل:** ${Number(latest.failed_count).toLocaleString('en-US')}\n**تخطي:** ${Number(latest.skipped_count).toLocaleString('en-US')} من ${Number(latest.total_count).toLocaleString('en-US')}`
+    : 'لا توجد حملات سابقة.';
+  const description = [
+    `**الأعضاء المشتركون حالياً:** ${subscribers.toLocaleString('en-US')}`,
+    status,
+    '',
+    'العضو يختار الاشتراك بنفسه عبر `/dm-notifications enabled:true`، ويمكنه إلغاء الاشتراك في أي وقت. الأمر `/dm-announcement` يعرض معاينة ويطلب تأكيداً قبل بدء الإرسال.',
+    'يُرسل البوت تدريجياً لتجنب ضغط Discord، ويتخطى من غادر السيرفر أو ألغى الاشتراك، ويُسجل من أغلق الخاص كفشل.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  return withSectionImage({ embeds: [adminEmbed('📨 إعلانات DOS الخاصة', description)], components: [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:broadcast:status').setLabel('تحديث الحالة').setEmoji('🔄').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ] }, 'إعلانات الخاص', 'حملات خاصة للأعضاء الذين اشتركوا باستقبالها', 'DM');
+}
 function economyPayload(guildId) {
   const curve = database.curveForGuild(guildId);
   const values = {
@@ -358,15 +431,17 @@ function dailyQuestionAdminPayload(guildId, notice = '') {
     `**بنك الأسئلة:** ${state.questionCount} سؤالاً عشوائياً`,
     `**موعد السؤال القادم:** ${nextText}`,
     `**السؤال الحالي:** ${state.open ? state.open.question_text : 'لا يوجد سؤال مفتوح حالياً'}`,
+    `**سؤال مخصص للمرة القادمة:** ${database.getConfig(guildId, 'daily_question_custom_question', '') || 'لا يوجد — سيختار البوت من بنك الأسئلة'}`,
     '',
-    'يُرسل سؤال واحد كل يوم في وقت عشوائي مختلف بين 10 صباحاً و10 مساءً بتوقيت السيرفر (TZ). أول إجابة مطابقة صحيحة تحصل على الجائزة مرة واحدة فقط.',
+    'يُرسل سؤال واحد كل يوم في وقت عشوائي مختلف بين 10 صباحاً و10 مساءً بتوقيت السيرفر (TZ). أول إجابة مطابقة صحيحة تحصل على الجائزة مرة واحدة فقط. يمكنك تعديل السؤال والإجابة وعناوين ورسائل السؤال والفوز.',
     ...(notice ? ['', `✅ ${notice}`] : [])
   ].join('\n');
   return withSectionImage({ embeds: [adminEmbed('❓ سؤال DOS اليومي', description)], components: [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('admin:daily-question:toggle').setLabel(state.enabled ? 'إيقاف الأسئلة' : 'تفعيل الأسئلة').setStyle(state.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
       new ButtonBuilder().setCustomId('admin:daily-question:reward').setLabel('تعديل جائزة السؤال').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('admin:daily-question:now').setLabel('إرسال سؤال الآن').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('admin:daily-question:now').setLabel('إرسال سؤال الآن').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:daily-question:content-edit').setLabel('تعديل نص السؤال والإجابة').setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:daily-question:channel').setPlaceholder('اختر قناة سؤال اليوم').setChannelTypes(ChannelType.GuildText)),
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:daily-question:clear-channel').setLabel('إلغاء القناة').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
@@ -397,6 +472,7 @@ function tasksAdminPayload(guildId, notice = '') {
   const rows = [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('admin:tasks:add').setLabel('إنشاء مهمة').setEmoji('➕').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('admin:tasks:claims').setLabel(`مراجعة الإثباتات (${claims.length})`).setEmoji('🧾').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('admin:tasks:message').setLabel('تعديل رسالة الفوز بالمهمة').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
   )];
   if (menu) rows.push(menu);
@@ -537,6 +613,8 @@ async function handleAdminInteraction(interaction, client) {
       : section === 'daily_questions' ? dailyQuestionAdminPayload(interaction.guildId)
       : section === 'tasks' ? tasksAdminPayload(interaction.guildId)
       : section === 'invite_rewards' ? inviteRewardsPayload(interaction.guildId)
+      : section === 'broadcast' ? broadcastAdminPayload(interaction.guildId)
+      : section === 'commands' ? commandControlsPayload(interaction.guildId)
       : section === 'features' ? featuresPayload(interaction.guildId)
       : section === 'economy' ? economyPayload(interaction.guildId)
       : section === 'member_tools' ? memberToolsPayload()
@@ -661,6 +739,28 @@ async function handleAdminInteraction(interaction, client) {
       .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('عدد DOS Coin للفائز').setStyle(TextInputStyle.Short).setRequired(true).setValue(String(current))));
     return interaction.showModal(modal);
   }
+  if (parts[1] === 'daily-question' && parts[2] === 'content-edit') {
+    const question = database.getConfig(interaction.guildId, 'daily_question_custom_question', '');
+    const answer = database.getConfig(interaction.guildId, 'daily_question_custom_answer', '');
+    const title = database.getConfig(interaction.guildId, 'daily_question_title', '💎 سؤال DOS اليومي');
+    const body = database.getConfig(interaction.guildId, 'daily_question_message_template', '**{question}**\n\n🏆 أول إجابة صحيحة تحصل على **{reward} DOS Coin**.\nاكتب إجابتك مباشرة في هذه القناة.');
+    const winner = database.getConfig(interaction.guildId, 'daily_question_winner_template', 'مبروك {user}! كنت أول من أجاب إجابة صحيحة.\n\nحصلت على **{reward} DOS Coin** 💎');
+    const questionInput = new TextInputBuilder().setCustomId('question').setLabel('سؤال مخصص للمرة القادمة (فارغ = عشوائي)').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(900);
+    const answerInput = new TextInputBuilder().setCustomId('answer').setLabel('إجابة السؤال المخصص (مع السؤال فقط)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(180);
+    // Discord modals reject an empty default value; leave optional fields unset
+    // so admins can deliberately clear the custom question and return to random mode.
+    if (String(question).trim()) questionInput.setValue(String(question).slice(0,900));
+    if (String(answer).trim()) answerInput.setValue(String(answer).slice(0,180));
+    const modal = new ModalBuilder().setCustomId('admin:daily-question:content-save').setTitle('تعديل نص سؤال اليوم')
+      .addComponents(
+        new ActionRowBuilder().addComponents(questionInput),
+        new ActionRowBuilder().addComponents(answerInput),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('title').setLabel('عنوان رسالة السؤال').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(256).setValue(String(title).slice(0,256))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('body').setLabel('نص السؤال — {question} و{reward}').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000).setValue(String(body).slice(0,1000))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('winner').setLabel('رسالة الفائز — {user} و{reward}').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(900).setValue(String(winner).slice(0,900)))
+      );
+    return interaction.showModal(modal);
+  }
   if (parts[1] === 'daily-question' && parts[2] === 'now') {
     if (database.getConfig(interaction.guildId, 'daily_questions_enabled', '0') !== '1') return interaction.reply({ content: 'فعّل الأسئلة اليومية أولاً.', flags: MessageFlags.Ephemeral });
     if (!database.getConfig(interaction.guildId, 'daily_question_channel_id', '')) return interaction.reply({ content: 'حدد قناة السؤال أولاً.', flags: MessageFlags.Ephemeral });
@@ -671,6 +771,12 @@ async function handleAdminInteraction(interaction, client) {
   }
   if (parts[1] === 'invite-reward' && parts[2] === 'edit') return interaction.showModal(inviteRewardModal(interaction.guildId));
   if (parts[1] === 'tasks' && parts[2] === 'add') return interaction.showModal(taskCreateModal());
+  if (parts[1] === 'tasks' && parts[2] === 'message') {
+    const current = database.getConfig(interaction.guildId, 'task_reward_message_template', '🏆 <@{user}> أكمل المهمة **{task}** وكان من الفائزين! حصل على **{reward} {unit}**.');
+    const modal = new ModalBuilder().setCustomId('admin:tasks:message-save').setTitle('تعديل رسالة الفوز بالمهمة')
+      .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('template').setLabel('الرسالة — {user} {task} {reward} {unit}').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1700).setValue(String(current).slice(0,1700))));
+    return interaction.showModal(modal);
+  }
   if (parts[1] === 'tasks' && parts[2] === 'back') return interaction.update(tasksAdminPayload(interaction.guildId));
   if (parts[1] === 'tasks' && parts[2] === 'claims') return interaction.update(taskClaimsPayload(interaction.guildId));
   if (parts[1] === 'tasks' && parts[2] === 'select' && interaction.isStringSelectMenu()) return interaction.update(taskDetailsPayload(interaction.guildId, Number(interaction.values[0])));
@@ -721,7 +827,7 @@ async function handleAdminInteraction(interaction, client) {
       grantTaskReward(interaction.guildId,userId,result.rewardType,result.rewardAmount);
       const channelId = result.task.channel_id || database.getConfig(interaction.guildId,'tasks_announce_channel_id','');
       const channel = channelId ? await interaction.guild.channels.fetch(channelId).catch(() => null) : interaction.guild.systemChannel;
-      await publishTaskRewardMessage(channel,userId,result.task,result.rewardAmount,result.rewardType);
+      await publishTaskRewardMessage(channel,userId,result.task,result.rewardAmount,result.rewardType,interaction.guildId);
     }
     database.logAdmin(interaction.guildId,interaction.user.id,'task_claim_review',`${taskId};${userId};${parts[2]}`);
     return interaction.update(taskClaimsPayload(interaction.guildId,result.approved ? 'تم قبول الإثبات وصرف الجائزة.' : 'تم رفض الإثبات.'));
@@ -745,6 +851,21 @@ async function handleAdminInteraction(interaction, client) {
     database.logAdmin(interaction.guildId,interaction.user.id,'feature_toggle',`${key}=${enabled}`);
     if (key === 'shop') await refreshPublishedShop(interaction.guild).catch((error) => console.error('[ADMIN] Store refresh failed:',error.message));
     return interaction.update(featuresPayload(interaction.guildId));
+  }
+  if (parts[1] === 'commands' && parts[2] === 'select' && interaction.isStringSelectMenu()) {
+    return interaction.update(commandControlsPayload(interaction.guildId, interaction.values[0]));
+  }
+  if (parts[1] === 'command-toggle') {
+    const key = parts[2];
+    const command = COMMAND_CONTROLS.find(([itemKey]) => itemKey === key);
+    if (!command) return interaction.reply({ content: 'الأمر غير معروف.', flags: MessageFlags.Ephemeral });
+    const enabled = !database.featureEnabled(interaction.guildId, `command:${key}`);
+    database.setFeature(interaction.guildId, `command:${key}`, enabled, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'command_toggle', `${key}=${enabled}`);
+    return interaction.update(commandControlsPayload(interaction.guildId, key, enabled ? 'تم تشغيل الأمر.' : 'تم إيقاف الأمر.'));
+  }
+  if (parts[1] === 'broadcast' && parts[2] === 'status') {
+    return interaction.update(broadcastAdminPayload(interaction.guildId, 'تم تحديث حالة حملات الخاص.'));
   }
   if (parts[1] === 'level-role' && ['write','voice'].includes(parts[2])) {
     const kind = parts[2] === 'voice' ? 'صوت' : 'كتابة';
@@ -976,6 +1097,29 @@ async function handleAdminModal(interaction) {
     database.setConfig(interaction.guildId,'daily_question_reward',amount,interaction.user.id);
     database.logAdmin(interaction.guildId,interaction.user.id,'daily_question_reward',String(amount));
     return interaction.reply({ content: `✅ تم ضبط جائزة سؤال اليوم على ${amount} DOS Coin.`, flags: MessageFlags.Ephemeral });
+  }
+  if (parts[1] === 'daily-question' && parts[2] === 'content-save') {
+    const question = interaction.fields.getTextInputValue('question').trim().slice(0,900);
+    const answer = interaction.fields.getTextInputValue('answer').trim().slice(0,180);
+    if (Boolean(question) !== Boolean(answer)) return interaction.reply({ content: 'للسؤال المخصص اكتب السؤال والإجابة معاً، أو اترك الحقلين فارغين لاستخدام البنك العشوائي.', flags: MessageFlags.Ephemeral });
+    const title = interaction.fields.getTextInputValue('title').trim().slice(0,256);
+    const body = interaction.fields.getTextInputValue('body').trim().slice(0,1000);
+    const winner = interaction.fields.getTextInputValue('winner').trim().slice(0,900);
+    if (!title || !body || !winner) return interaction.reply({ content: 'العنوان ونص السؤال ورسالة الفائز مطلوبة.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'daily_question_custom_question', question, interaction.user.id);
+    database.setConfig(interaction.guildId, 'daily_question_custom_answer', answer, interaction.user.id);
+    database.setConfig(interaction.guildId, 'daily_question_title', title, interaction.user.id);
+    database.setConfig(interaction.guildId, 'daily_question_message_template', body, interaction.user.id);
+    database.setConfig(interaction.guildId, 'daily_question_winner_template', winner, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'daily_question_content_update', question ? 'custom-next-question' : 'message-templates-only');
+    return interaction.reply({ content: `✅ تم حفظ نص السؤال ورسالة الفائز.${question ? ' وسيُستخدم السؤال المخصص في المرة القادمة.' : ' سيستمر اختيار الأسئلة عشوائياً.'}`, flags: MessageFlags.Ephemeral });
+  }
+  if (parts[1] === 'tasks' && parts[2] === 'message-save') {
+    const template = interaction.fields.getTextInputValue('template').trim().slice(0,1700);
+    if (!template) return interaction.reply({ content: 'اكتب رسالة الفوز بالمهمة.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'task_reward_message_template', template, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'task_reward_message_update', 'updated');
+    return interaction.reply({ content: '✅ تم حفظ رسالة الفوز الجديدة، وستُستخدم في إعلانات المهام القادمة.', flags: MessageFlags.Ephemeral });
   }
   if (parts[1] === 'invite-reward' && parts[2] === 'save') {
     const raw = interaction.fields.getTextInputValue('reward').trim().toLowerCase();

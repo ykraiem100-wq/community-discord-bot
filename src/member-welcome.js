@@ -1,6 +1,6 @@
 'use strict';
 
-const { AttachmentBuilder, EmbedBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { AttachmentBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const database = require('./database');
 const { renderMemberWelcomeCard } = require('./render');
 const { DEFAULT_MEMBER_WELCOME_TEXT, formatMemberWelcomeText } = require('./member-welcome-text');
@@ -36,17 +36,12 @@ async function sendMemberWelcomeCard(member, options = {}) {
     if (!permissions || !permissions.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles])) return null;
   }
   const image = await renderMemberWelcomeCard({ user: member.user, guild: member.guild });
-  const count = Math.max(0, Math.floor(Number(member.guild.memberCount) || 0));
   const description = formatMemberWelcomeText(config.template, member);
-  const embed = new EmbedBuilder()
-    .setColor(0x55DDF5)
-    .setAuthor({ name: member.guild.name, iconURL: member.guild.iconURL({ extension: 'png', size: 128 }) || undefined })
-    .setTitle('أهلاً وسهلاً بك في DOS COMMUNITY')
-    .setDescription(description)
-    .setImage('attachment://dos-member-welcome.png')
-    .setFooter({ text: `أنت العضو رقم ${count.toLocaleString('en-US')} • DOS COMMUNITY` });
   return channel.send({
-    embeds: [embed],
+    // Send copy as ordinary message content and the artwork as a plain image
+    // attachment. This removes Discord's embed frame and keeps all wording
+    // editable from the administration panel.
+    content: description,
     files: [new AttachmentBuilder(image, { name: 'dos-member-welcome.png' })],
     allowedMentions: { users: [member.id], roles: [], parse: [] }
   });

@@ -175,7 +175,9 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
     ? user.displayAvatarURL({ extension: 'png', size: 512 }) : null;
   const avatar = await loadSafeImage(avatarUrl);
   // Clip the profile photo to a mathematically perfect circle (not a rounded square).
-  drawCircleImage(ctx, avatar, 56, 48, 90, '#C8F4FF', 1.1);
+  // The template's inner portrait aperture is about 100px wide. Keep the
+  // avatar centered and fill the opening without covering the metallic rim.
+  drawCircleImage(ctx, avatar, 47, 39, 108, '#C8F4FF', 0.7);
 
   const name = displayName || (user && (user.globalName || user.username)) || 'عضو DOS';
   drawText(ctx, name.startsWith('@') ? name : '@' + name, 210, 92, 17, C.white, 900, 'left', 235);
@@ -212,37 +214,8 @@ async function renderMemberWelcomeCard({ user = null, guild = null } = {}) {
   const logo = await loadTemplate('dos-community-logo.png');
   drawBrandLogo(ctx, logo, 1514, 417, 168, '#55DDF5');
 
-  // Brand typography in the clean center panel: cyan welcome line, silver DOS,
-  // cyan upper-edge accent on the S, and restrained geometric corner marks.
-  drawText(ctx, 'Welcome To', 1015, 384, 45, '#7DEBFF', 900, 'center', 620);
-  ctx.save();
-  const wordFont = '900 104px DOSLatin, Arial, sans-serif';
-  ctx.font = wordFont;
-  const totalWidth = ctx.measureText('DOS').width;
-  const doWidth = ctx.measureText('DO').width;
-  const sWidth = ctx.measureText('S').width;
-  const startX = 1015 - totalWidth / 2;
-  drawText(ctx, 'DOS', 1015, 520, 104, '#F7FAFD', 900, 'center', 540);
-  // Small luminous slash just above the upper shoulder of the final S.
-  ctx.beginPath();
-  const sx = startX + doWidth + sWidth * 0.48;
-  ctx.moveTo(sx, 468);
-  ctx.lineTo(sx + Math.max(18, sWidth * 0.27), 454);
-  ctx.strokeStyle = '#55DDF5';
-  ctx.lineWidth = 7;
-  ctx.lineCap = 'round';
-  ctx.shadowColor = '#55DDF5';
-  ctx.shadowBlur = 12;
-  ctx.stroke();
-  // Bracket-like corner ornaments around DOS.
-  ctx.shadowBlur = 7;
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(117,232,255,0.95)';
-  ctx.beginPath();
-  ctx.moveTo(820, 470); ctx.lineTo(820, 493); ctx.lineTo(842, 493);
-  ctx.moveTo(1210, 556); ctx.lineTo(1210, 579); ctx.lineTo(1232, 579);
-  ctx.stroke();
-  ctx.restore();
+  // Keep the center panel free of baked-in wording. The editable welcome copy
+  // is sent as a normal Discord message above this image.
   return canvas.toBuffer('image/png');
 }
 

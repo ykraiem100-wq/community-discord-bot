@@ -49,7 +49,11 @@ db.exec(
   'CREATE INDEX IF NOT EXISTS idx_daily_question_open ON daily_question_runs(guild_id,status);' +
   "CREATE TABLE IF NOT EXISTS guild_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', period TEXT NOT NULL DEFAULT 'daily' CHECK(period IN ('daily','weekly')), tracking_type TEXT NOT NULL DEFAULT 'manual' CHECK(tracking_type IN ('xp','messages','manual')), threshold INTEGER NOT NULL DEFAULT 1, channel_id TEXT, reward_type TEXT NOT NULL DEFAULT 'coins' CHECK(reward_type IN ('coins','xp')), reward_amount INTEGER NOT NULL DEFAULT 1, max_winners INTEGER NOT NULL DEFAULT 3, enabled INTEGER NOT NULL DEFAULT 1, created_by TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()));" +
   "CREATE TABLE IF NOT EXISTS task_progress (guild_id TEXT NOT NULL, task_id INTEGER NOT NULL, user_id TEXT NOT NULL, period_key TEXT NOT NULL, progress INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'progress' CHECK(status IN ('progress','pending','awarded','rejected')), proof TEXT NOT NULL DEFAULT '', completed_at INTEGER, awarded_at INTEGER, PRIMARY KEY(guild_id,task_id,user_id,period_key));" +
-  'CREATE INDEX IF NOT EXISTS idx_task_progress_claims ON task_progress(guild_id,status,completed_at);'
+  'CREATE INDEX IF NOT EXISTS idx_task_progress_claims ON task_progress(guild_id,status,completed_at);' +
+  'CREATE TABLE IF NOT EXISTS dm_announcement_subscribers (guild_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,user_id));' +
+  "CREATE TABLE IF NOT EXISTS dm_broadcast_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, created_by TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','completed','cancelled')), total_count INTEGER NOT NULL DEFAULT 0, sent_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0, skipped_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch()));" +
+  "CREATE TABLE IF NOT EXISTS dm_broadcast_recipients (job_id INTEGER NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed','skipped')), error TEXT NOT NULL DEFAULT '', attempted_at INTEGER, PRIMARY KEY(job_id,user_id));" +
+  'CREATE INDEX IF NOT EXISTS idx_dm_broadcast_queue ON dm_broadcast_recipients(job_id,status);'
 );
 
 // Additive migration for databases created by older versions.
@@ -515,6 +519,64 @@ function setTaskMessageProgress(guildId, userId, channelId) {
   return incrementTaskProgress(guildId,userId,'messages',1,channelId);
 }
 
+function setDmAnnouncementSubscription(guildId, userId, enabled) {
+  if (enabled) {
+    db.prepare('INSERT OR IGNORE INTO dm_announcement_subscribers(guild_id,user_id) VALUES(?,?)').run(guildId,userId);
+    return true;
+  }
+  return db.prepare('DELETE FROM dm_announcement_subscribers WHERE guild_id=? AND user_id=?').run(guildId,userId).changes > 0;
+}
+function isDmAnnouncementSubscriber(guildId, userId) {
+  return Boolean(db.prepare('SELECT 1 FROM dm_announcement_subscribers WHERE guild_id=? AND user_id=?').get(guildId,userId));
+}
+function dmAnnouncementSubscribers(guildId) {
+  return db.prepare('SELECT user_id FROM dm_announcement_subscribers WHERE guild_id=? ORDER BY created_at ASC').all(guildId).map((row) => row.user_id);
+}
+function dmAnnouncementSubscriberCount(guildId) {
+  return Number(db.prepare('SELECT COUNT(*) AS n FROM dm_announcement_subscribers WHERE guild_id=?').get(guildId).n || 0);
+}
+function createDmBroadcastJob(guildId, actorId, message, userIds) {
+  const ids = [...new Set((userIds || []).map(String).filter((id) => /^\d{15,22}$/.test(id)))];
+  if (!ids.length) return { error: 'no_recipients' };
+  const tx = db.transaction(() => {
+    const active = db.prepare("SELECT id FROM dm_broadcast_jobs WHERE guild_id=? AND status='running' LIMIT 1").get(guildId);
+    if (active) return { error: 'active', id: Number(active.id) };
+    const result = db.prepare("INSERT INTO dm_broadcast_jobs(guild_id,created_by,message,status,total_count) VALUES(?,?,?,'running',?)")
+      .run(guildId,actorId,String(message).slice(0,1800),ids.length);
+    const jobId = Number(result.lastInsertRowid);
+    const insert = db.prepare("INSERT INTO dm_broadcast_recipients(job_id,user_id,status) VALUES(?,?,'pending')");
+    for (const userId of ids) insert.run(jobId,userId);
+    return { id: jobId, total: ids.length };
+  });
+  return tx();
+}
+function activeDmBroadcastJobs() {
+  return db.prepare("SELECT * FROM dm_broadcast_jobs WHERE status='running' ORDER BY id ASC").all();
+}
+function nextDmBroadcastRecipient(jobId) {
+  return db.prepare("SELECT * FROM dm_broadcast_recipients WHERE job_id=? AND status='pending' ORDER BY rowid ASC LIMIT 1").get(jobId) || null;
+}
+function markDmBroadcastRecipient(jobId, userId, status, error = '') {
+  if (!['sent','failed','skipped'].includes(status)) throw new TypeError('Invalid DM broadcast recipient status');
+  const tx = db.transaction(() => {
+    const changed = db.prepare("UPDATE dm_broadcast_recipients SET status=?,error=?,attempted_at=unixepoch() WHERE job_id=? AND user_id=? AND status='pending'")
+      .run(status,String(error).slice(0,300),jobId,userId).changes;
+    if (!changed) return false;
+    db.prepare("UPDATE dm_broadcast_jobs SET sent_count=(SELECT COUNT(*) FROM dm_broadcast_recipients WHERE job_id=? AND status='sent'), failed_count=(SELECT COUNT(*) FROM dm_broadcast_recipients WHERE job_id=? AND status='failed'), skipped_count=(SELECT COUNT(*) FROM dm_broadcast_recipients WHERE job_id=? AND status='skipped'), updated_at=unixepoch() WHERE id=?")
+      .run(jobId,jobId,jobId,jobId);
+    const pending = db.prepare("SELECT COUNT(*) AS n FROM dm_broadcast_recipients WHERE job_id=? AND status='pending'").get(jobId).n;
+    if (!pending) db.prepare("UPDATE dm_broadcast_jobs SET status='completed',updated_at=unixepoch() WHERE id=? AND status='running'").run(jobId);
+    return true;
+  });
+  return tx();
+}
+function getDmBroadcastJob(guildId, jobId) {
+  return db.prepare('SELECT * FROM dm_broadcast_jobs WHERE guild_id=? AND id=?').get(guildId,jobId) || null;
+}
+function latestDmBroadcastJob(guildId) {
+  return db.prepare('SELECT * FROM dm_broadcast_jobs WHERE guild_id=? ORDER BY id DESC LIMIT 1').get(guildId) || null;
+}
+
 function pruneXpEvents() {
   return db.prepare('DELETE FROM xp_events WHERE created_at < unixepoch() - 45*86400').run().changes;
 }
@@ -563,5 +625,7 @@ module.exports = {
   listGuildTasks, getGuildTask, createGuildTask, updateGuildTask, deleteGuildTask,
   incrementTaskProgress, getTaskProgress, claimManualTask, pendingTaskClaims, reviewTaskClaim,
   setTaskMessageProgress,
+  setDmAnnouncementSubscription, isDmAnnouncementSubscriber, dmAnnouncementSubscribers, dmAnnouncementSubscriberCount,
+  createDmBroadcastJob, activeDmBroadcastJobs, nextDmBroadcastRecipient, markDmBroadcastRecipient, getDmBroadcastJob, latestDmBroadcastJob,
   close: () => db.close()
 };

@@ -16,6 +16,7 @@ const { tickDailyQuestions, checkDailyQuestionAnswer } = require('./daily-questi
 const { memberTasksPayload, handleTaskInteraction, handleTaskModal, grantTaskReward, publishTaskRewardMessage } = require('./tasks');
 const { getBoosterMultiplier, applyXpMultiplier } = require('./booster-xp');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
+const { broadcastStatusText, processDmBroadcastTick } = require('./broadcast');
 
 const token = (process.env.DISCORD_TOKEN || '').trim();
 const clientId = (process.env.DISCORD_CLIENT_ID || '').trim();
@@ -62,8 +63,33 @@ const slashCommands = [
     .addStringOption((option) => option.setName('type').setDescription('نوع XP').setRequired(true)
       .addChoices({ name: 'كتابي', value: 'text' }, { name: 'صوتي', value: 'voice' })),
   new SlashCommandBuilder().setName('reset-member').setDescription('إعادة ضبط بيانات عضو بعد التأكيد (للإدارة فقط)')
-    .addUserOption((option) => option.setName('member').setDescription('العضو المستهدف').setRequired(true))
+    .addUserOption((option) => option.setName('member').setDescription('العضو المستهدف').setRequired(true)),
+  new SlashCommandBuilder().setName('dm-notifications').setDescription('الاشتراك أو إلغاء الاشتراك في إعلانات DOS الخاصة')
+    .addBooleanOption((option) => option.setName('enabled').setDescription('تفعيل أو إيقاف استقبال إعلانات الخاص').setRequired(true)),
+  new SlashCommandBuilder().setName('dm-announcement').setDescription('إعداد إعلان خاص للمشتركين بإعلانات DOS (للإدارة فقط)')
+    .addStringOption((option) => option.setName('message').setDescription('نص الإعلان الذي سيصل للمشتركين فقط').setRequired(true).setMaxLength(1800)),
+  new SlashCommandBuilder().setName('dm-announcement-status').setDescription('عرض حالة آخر إعلان خاص (للإدارة فقط)')
 ].map((command) => command.toJSON());
+
+const PREFIX_COMMAND_KEYS = Object.freeze({
+  'مساعدة': 'help', 'اوامر': 'help', 'أوامر': 'help', 'محفظتي': 'wallet',
+  'مهامي': 'tasks', 'دعواتي': 'invites', 'رابط': 'invite_link',
+  'top': 'top', 'متصدرين': 'top', 'إحصائيات': 'stats', 'المتجر': 'shop',
+  'طلبات': 'orders', 'قبول': 'order_review', 'رفض': 'order_review',
+  'اضافة_عملات': 'add_coins', 'إضافة_عملات': 'add_coins', 'add-coins': 'add_coins',
+  'اضافة_xp': 'add_xp', 'إضافة_xp': 'add_xp', 'اضافة_خبرة': 'add_xp', 'إضافة_خبرة': 'add_xp', 'add-xp': 'add_xp',
+  'reset': 'reset_member', 'ريست': 'reset_member', 'reset-member': 'reset_member',
+  'تعيين_قناة': 'set_channel', 'رتبة_مستوى': 'level_role'
+});
+const SLASH_COMMAND_KEYS = Object.freeze({
+  wallet: 'wallet', top: 'top', shop: 'shop', 'color-selection': 'color_selection',
+  'admin-panel': 'admin_panel', 'add-coins': 'add_coins', 'add-xp': 'add_xp',
+  'reset-member': 'reset_member', 'dm-notifications': 'dm_notifications',
+  'dm-announcement': 'dm_announcement', 'dm-announcement-status': 'dm_announcement_status'
+});
+function commandEnabled(guildId, key) {
+  return !key || database.featureEnabled(guildId, `command:${key}`);
+}
 
 async function registerSlashCommands() {
   if (!clientId) return;
@@ -75,7 +101,7 @@ async function registerSlashCommands() {
 }
 function helpEmbed() {
   return new EmbedBuilder().setColor(CYAN).setTitle('DOS COMMUNITY • الأوامر').setDescription([
-    '/wallet أو .محفظتي أو r — عرض المحفظة',
+    '/wallet أو .محفظتي — عرض المحفظة',
     '/top أو اكتب TOP — المتصدرون',
     '/shop أو .المتجر — متجر DOS',
     '/color-selection — استكمال اختيار اللون برقم الطلب إن تعذّر فتح الرسائل الخاصة',
@@ -83,8 +109,9 @@ function helpEmbed() {
     '.إحصائيات — إحصائيات السيرفر',
     '.دعواتي — عدد الأعضاء الذين انضموا من رابطك الشخصي',
     '.مهامي — عرض تقدمك في مهام اليوم والأسبوع',
-    'r — اختصار سريع للمحفظة',
     '.رابط — إرسال رابط دعوة شخصي إلى الخاص',
+    '/dm-notifications enabled:true — الاشتراك في إعلانات الخاص، وfalse لإلغاء الاشتراك',
+    '/dm-announcement — إرسال إعلان خاص للمشتركين بعد التأكيد',
     'للإدارة: /admin-panel — لوحة التحكم التفاعلية',
     'للإدارة: /add-coins و /add-xp و /reset-member (مع تأكيد لإعادة الضبط)',
     'للإدارة: .اضافة_عملات @عضو 500 أو .اضافة_xp @عضو 500 كتابة',
@@ -190,7 +217,7 @@ async function applyTaskCompletions(guild, fallbackChannel, completions) {
       grantTaskReward(guild.id, result.userId, result.rewardType, result.rewardAmount);
       const configuredChannel = database.getConfig(guild.id, 'tasks_announce_channel_id', '');
       const channel = configuredChannel ? await guild.channels.fetch(configuredChannel).catch(() => null) : fallbackChannel || guild.systemChannel;
-      await publishTaskRewardMessage(channel, result.userId, result.task, result.rewardAmount, result.rewardType);
+      await publishTaskRewardMessage(channel, result.userId, result.task, result.rewardAmount, result.rewardType, guild.id);
     } catch (error) {
       console.error('[TASKS] Reward delivery failed:', error);
     }
@@ -228,6 +255,8 @@ async function handleCommand(message, rawCommandText = null) {
   const guildId = message.guild.id;
   const userId = message.author.id;
   try {
+    const commandKey = PREFIX_COMMAND_KEYS[command];
+    if (commandKey && !commandEnabled(guildId, commandKey)) return message.reply('هذا الأمر متوقف حالياً من لوحة التحكم.');
     if (['مساعدة','اوامر','أوامر'].includes(command)) return message.reply(await helpPayload());
     if (command === 'محفظتي') {
       if (!database.featureEnabled(guildId,'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
@@ -339,6 +368,43 @@ async function handleCommand(message, rawCommandText = null) {
 async function handleSlashCommand(interaction) {
   if (!interaction.guildId || !interaction.guild) return interaction.reply({ content: 'استخدم هذا الأمر داخل سيرفر DOS COMMUNITY.', flags: MessageFlags.Ephemeral });
   const guildId = interaction.guildId;
+  const commandKey = SLASH_COMMAND_KEYS[interaction.commandName];
+  if (commandKey && !commandEnabled(guildId, commandKey)) {
+    return interaction.reply({ content: 'هذا الأمر متوقف حالياً من لوحة التحكم.', flags: MessageFlags.Ephemeral });
+  }
+  if (interaction.commandName === 'dm-notifications') {
+    const enabled = interaction.options.getBoolean('enabled', true);
+    database.setDmAnnouncementSubscription(guildId, interaction.user.id, enabled);
+    return interaction.reply({
+      content: enabled
+        ? '✅ اشتركت في إعلانات DOS الخاصة. يمكنك إلغاء الاشتراك في أي وقت باستخدام `/dm-notifications enabled:false`.'
+        : 'تم إلغاء اشتراكك في إعلانات الخاص ولن تصلك الحملات القادمة.',
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  if (interaction.commandName === 'dm-announcement') {
+    if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions, guildId)) {
+      return interaction.reply({ content: 'هذا الأمر للإدارة فقط.', flags: MessageFlags.Ephemeral });
+    }
+    const message = interaction.options.getString('message', true).trim();
+    if (!message) return interaction.reply({ content: 'اكتب نص الإعلان أولاً.', flags: MessageFlags.Ephemeral });
+    const subscribers = database.dmAnnouncementSubscriberCount(guildId);
+    if (!subscribers) return interaction.reply({ content: 'لا يوجد أعضاء مشتركين في إعلانات الخاص حالياً. اطلب من الأعضاء الاشتراك باستخدام `/dm-notifications enabled:true`.', flags: MessageFlags.Ephemeral });
+    const preview = new EmbedBuilder().setColor(CYAN).setTitle('📨 معاينة إعلان DOS الخاص')
+      .setDescription(message.slice(0, 4000))
+      .addFields({ name: 'المستلمون', value: `${subscribers.toLocaleString('en-US')} عضو مشترك فقط`, inline: true }, { name: 'طريقة الإرسال', value: 'إرسال تدريجي مع فاصل لتجنّب تجاوز حدود Discord', inline: true })
+      .setFooter({ text: 'لن تصل الرسالة لمن لم يشترك، أو لمن أغلق الرسائل الخاصة من البوت.' });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`broadcast:confirm:${interaction.user.id}`).setLabel('تأكيد الإرسال').setEmoji('📨').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`broadcast:cancel:${interaction.user.id}`).setLabel('إلغاء').setStyle(ButtonStyle.Secondary)
+    );
+    return interaction.reply({ embeds: [preview], components: [row], flags: MessageFlags.Ephemeral });
+  }
+  if (interaction.commandName === 'dm-announcement-status') {
+    if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions, guildId)) return interaction.reply({ content: 'هذا الأمر للإدارة فقط.', flags: MessageFlags.Ephemeral });
+    const latest = database.latestDmBroadcastJob(guildId);
+    return interaction.reply({ content: `${broadcastStatusText(latest)}\n\n**المشتركون الحاليون:** ${database.dmAnnouncementSubscriberCount(guildId).toLocaleString('en-US')}`, flags: MessageFlags.Ephemeral });
+  }
   if (interaction.commandName === 'admin-panel') {
     if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions,guildId)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
     const dashboardChannelId = database.getConfig(guildId, 'admin_panel_channel_id', '');
@@ -459,6 +525,10 @@ client.once('clientReady',async () => {
   await registerSlashCommands().catch((error) => console.error('[SLASH] Registration failed:',error.message));
   await tickDailyQuestions(client).catch((error) => console.error('[DAILY QUESTION] Initial scheduler failed:', error));
   setInterval(() => tickDailyQuestions(client).catch((error) => console.error('[DAILY QUESTION] Scheduler failed:', error)), 60_000).unref();
+  processDmBroadcastTick(client).catch((error) => console.error('[DM BROADCAST] Initial queue tick failed:', error));
+  // One opt-in recipient every two seconds. The queue is persisted in SQLite,
+  // so it safely resumes after a restart without resending completed recipients.
+  setInterval(() => processDmBroadcastTick(client).catch((error) => console.error('[DM BROADCAST] Queue tick failed:', error)), 2_000).unref();
   for (const session of database.allVoice()) database.stopVoice(session.guild_id,session.user_id);
   for (const guild of client.guilds.cache.values()) for (const state of guild.voiceStates.cache.values()) {
     if (state.channelId && state.member && !state.member.user.bot && !state.selfDeaf && !state.serverDeaf && !state.selfMute && !state.serverMute) database.startVoice(guild.id,state.id,Date.now());
@@ -499,10 +569,8 @@ client.on('messageCreate',async (message) => {
     const messageTaskCompletions = database.setTaskMessageProgress(message.guild.id, message.author.id, message.channel.id);
     await applyTaskCompletions(message.guild, message.channel, messageTaskCompletions);
   } catch (error) { console.error('[TASKS] Message progress failed:', error); }
-  // Bare 'r' is a dedicated wallet shortcut; it intentionally has no prefix.
-  if (/^r(?:\s+<@!?\d+>)?$/i.test(trimmed)) return handleCommand(message, trimmed);
   if (/^top$/i.test(trimmed)) {
-    if (!database.featureEnabled(message.guild.id,'top')) return;
+    if (!database.featureEnabled(message.guild.id,'top') || !commandEnabled(message.guild.id,'top')) return;
     return message.reply(await topPayload(message.guild,'all','all'));
   }
   if (trimmed.startsWith(prefix)) return handleCommand(message);
@@ -551,6 +619,26 @@ client.on('interactionCreate',async (interaction) => {
       if (shopHandled !== false) return shopHandled;
     }
     if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
+      if (interaction.isButton() && interaction.customId.startsWith('broadcast:')) {
+        const [, action, actorId] = interaction.customId.split(':');
+        if (interaction.user.id !== actorId) return interaction.reply({ content: 'هذا التأكيد مخصص للمسؤول الذي أنشأ الإعلان.', flags: MessageFlags.Ephemeral });
+        if (action === 'cancel') return interaction.update({ content: 'تم إلغاء الإعلان. لم تُرسل أي رسالة.', embeds: [], components: [] });
+        if (action === 'confirm') {
+          if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions, interaction.guildId)) {
+            return interaction.reply({ content: 'هذه العملية للإدارة فقط.', flags: MessageFlags.Ephemeral });
+          }
+          await interaction.deferUpdate();
+          const messageText = interaction.message.embeds?.[0]?.description || '';
+          if (!messageText.trim()) return interaction.editReply({ content: 'تعذر استرجاع نص الإعلان. أعد إنشاءه من الأمر.', embeds: [], components: [] });
+          const subscribers = database.dmAnnouncementSubscribers(interaction.guildId);
+          const created = database.createDmBroadcastJob(interaction.guildId, interaction.user.id, messageText, subscribers);
+          if (created.error === 'active') return interaction.editReply({ content: `يوجد إعلان قيد الإرسال بالفعل (#${created.id}). استخدم /dm-announcement-status لمتابعته.`, embeds: [], components: [] });
+          if (created.error) return interaction.editReply({ content: 'لا يوجد أعضاء مشتركين حالياً. لم يتم إرسال شيء.', embeds: [], components: [] });
+          database.logAdmin(interaction.guildId, interaction.user.id, 'dm_broadcast_started', `job=${created.id};recipients=${created.total}`);
+          await processDmBroadcastTick(client).catch(() => {});
+          return interaction.editReply({ content: `✅ تم إنشاء الإعلان #${created.id} وبدأ الإرسال التدريجي إلى **${created.total.toLocaleString('en-US')}** عضو مشترك. تابع التقدم باستخدام /dm-announcement-status.`, embeds: [], components: [] });
+        }
+      }
       if (interaction.customId.startsWith('tasks:')) {
         const taskHandled = await handleTaskInteraction(interaction);
         if (taskHandled !== false) return taskHandled;

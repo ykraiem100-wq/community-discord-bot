@@ -67,9 +67,18 @@ function grantTaskReward(guildId, userId, rewardType, amount) {
   }
   return database.addCoins(guildId, userId, value);
 }
-function publishTaskRewardMessage(channel, userId, task, amount, rewardType) {
+function publishTaskRewardMessage(channel, userId, task, amount, rewardType, guildId) {
   if (!channel || !channel.isTextBased() || !channel.send) return Promise.resolve(null);
   const unit = rewardType === 'xp' ? 'XP' : 'DOS Coin';
-  return channel.send({ content: `🏆 <@${userId}> أكمل المهمة **${task.title}** وكان من الفائزين! حصل على **${Number(amount).toLocaleString('en-US')} ${unit}**.`, allowedMentions: { users: [userId] } }).catch(() => null);
+  const template = guildId
+    ? database.getConfig(guildId, 'task_reward_message_template', '🏆 <@{user}> أكمل المهمة **{task}** وكان من الفائزين! حصل على **{reward} {unit}**.')
+    : '🏆 <@{user}> أكمل المهمة **{task}** وكان من الفائزين! حصل على **{reward} {unit}**.';
+  const content = String(template)
+    .replace(/\{user\}/g, userId)
+    .replace(/\{task\}/g, String(task.title || '').slice(0,120))
+    .replace(/\{reward\}/g, Number(amount).toLocaleString('en-US'))
+    .replace(/\{unit\}/g, unit)
+    .slice(0,1900);
+  return channel.send({ content, allowedMentions: { users: [userId], roles: [], parse: [] } }).catch(() => null);
 }
 module.exports = { memberTasksPayload, handleTaskInteraction, handleTaskModal, grantTaskReward, publishTaskRewardMessage, periodLabel, trackingLabel, rewardLabel };
