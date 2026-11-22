@@ -9,6 +9,7 @@ const { createWalletImage } = require('./wallet');
 const { renderTopLeaderboard, renderLevelUpBanner, renderAdminSection } = require('./render');
 const { shopPayload, handleShopInteraction, handleShopModal, processRoomExpirations, colorPickerPayload } = require('./shop');
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
+const { sendJoinWelcome, getJoinWelcomeConfig, parseButtonEmoji } = require('./join-welcome');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
 
 const token = (process.env.DISCORD_TOKEN || '').trim();
@@ -430,6 +431,7 @@ client.on('inviteDelete', (invite) => {
 });
 client.on('guildMemberAdd', (member) => {
   trackInviteJoin(member).catch((error) => console.error('[INVITES] Join tracking failed:', error));
+  sendJoinWelcome(member).catch((error) => console.error('[WELCOME] New member message failed:', error));
 });
 
 client.on('messageCreate',async (message) => {
@@ -477,6 +479,18 @@ client.on('interactionCreate',async (interaction) => {
       if (shopHandled !== false) return shopHandled;
     }
     if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
+      if (interaction.isButton() && interaction.customId === 'joinwelcome:wave') {
+        await interaction.deferUpdate();
+        try {
+          const configuredEmoji = parseButtonEmoji(getJoinWelcomeConfig(interaction.guildId).emoji);
+          await interaction.message.react(configuredEmoji.id || configuredEmoji.name);
+          await interaction.followUp({ content: `${configuredEmoji.name || '👋'} تمت التحية!`, flags: MessageFlags.Ephemeral });
+        } catch (error) {
+          console.warn('[WELCOME] Could not add wave reaction:', error.message);
+          await interaction.followUp({ content: 'تعذرت إضافة التفاعل. تأكد من صلاحية إضافة التفاعلات للبوت.', flags: MessageFlags.Ephemeral }).catch(() => {});
+        }
+        return;
+      }
       if (interaction.customId.startsWith('admin:')) return await handleAdminInteraction(interaction,client);
       if (interaction.customId.startsWith('public:') || interaction.customId.startsWith('notify:')) {
         const handled = await handlePublicPanelInteraction(interaction);

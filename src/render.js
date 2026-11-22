@@ -302,44 +302,37 @@ async function renderShopGrid(items = []) {
   return canvas.toBuffer('image/png');
 }
 
-function drawDosWordmark(ctx, centerX, centerY, fontSize, maxWidth) {
-  ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.transform(1, 0, -0.14, 1, 0, 0);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.direction = 'ltr';
-  ctx.font = `900 ${fontSize}px DOSLatin, Arial Black, Arial, sans-serif`;
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = Math.max(2, fontSize * 0.025);
-  ctx.strokeStyle = 'rgba(5, 14, 23, 0.96)';
-  ctx.shadowColor = 'rgba(70, 219, 255, 0.72)';
-  ctx.shadowBlur = fontSize * 0.16;
-  ctx.strokeText('DOS', 0, fontSize * 0.02, maxWidth);
-  ctx.shadowBlur = 0;
-  const chrome = ctx.createLinearGradient(0, -fontSize * 0.55, 0, fontSize * 0.55);
-  chrome.addColorStop(0, '#FFFFFF');
-  chrome.addColorStop(0.42, '#E7F1F8');
-  chrome.addColorStop(0.68, '#9EAFBE');
-  chrome.addColorStop(1, '#F7FBFF');
-  ctx.fillStyle = chrome;
-  ctx.fillText('DOS', 0, 0, maxWidth);
-  ctx.restore();
-}
-
-function drawDosMedallion(ctx, centerX, centerY, diameter, accent = '#63DDF5') {
-  ctx.save();
+// Brand mark supplied by the server owner. Keep its artwork exact, crop it
+// circularly, and add a restrained ice-cyan halo so it matches the DOS UI.
+function drawBrandLogo(ctx, image, centerX, centerY, diameter, accent = '#63DDF5') {
   const radius = diameter / 2;
-  const fill = ctx.createRadialGradient(centerX - radius * 0.28, centerY - radius * 0.38, radius * 0.08, centerX, centerY, radius);
-  fill.addColorStop(0, '#202832'); fill.addColorStop(1, '#070D14');
-  ctx.beginPath(); ctx.arc(centerX, centerY, radius, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill();
-  ctx.lineWidth = Math.max(4, diameter * 0.025);
-  ctx.strokeStyle = accent; ctx.shadowColor = accent; ctx.shadowBlur = diameter * 0.08; ctx.stroke();
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius + Math.max(3, diameter * 0.018), 0, Math.PI * 2);
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = Math.max(3, diameter * 0.018);
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = diameter * 0.075;
+  ctx.stroke();
   ctx.restore();
-  drawDosWordmark(ctx, centerX, centerY + diameter * 0.015, diameter * 0.54, diameter * 0.86);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  ctx.clip();
+  if (image) ctx.drawImage(image, centerX - radius, centerY - radius, diameter, diameter);
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius - 1, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(223, 246, 255, 0.82)';
+  ctx.lineWidth = Math.max(1, diameter * 0.006);
+  ctx.stroke();
+  ctx.restore();
 }
 
-// The welcome emblem uses a large DOS wordmark, not the server's uploaded icon.
+// The welcome image uses the exact owner-provided DOS COMMUNITY logo.
 // Readable message copy remains in the Discord embed to keep Arabic text crisp.
 async function renderMainPanel() {
   const canvas = createCanvas(1200, 560);
@@ -349,7 +342,8 @@ async function renderMainPanel() {
   ctx.fillStyle = bg; ctx.fillRect(0, 0, 1200, 560);
   patch(ctx, 16, 16, 1168, 528, '#373A41', 22, '#59636D');
   patch(ctx, 16, 16, 10, 528, '#63DDF5', 8);
-  drawDosMedallion(ctx, 600, 222, 260, '#63DDF5');
+  const logo = await loadTemplate('dos-community-logo.png');
+  drawBrandLogo(ctx, logo, 600, 222, 278, '#63DDF5');
   ctx.save();
   ctx.strokeStyle = 'rgba(99,221,245,0.52)'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(110, 430); ctx.lineTo(1090, 430); ctx.stroke();
@@ -363,13 +357,15 @@ async function renderMainPanel() {
 async function renderShopHeader() {
   const source = await loadSafeImage(path.join(TEMPLATE_DIR, 'shop-crest-bg.png'));
   if (!source) throw new Error('Missing DOS shop crest background.');
+  const logo = await loadTemplate('dos-community-logo.png');
   const width = source.width;
   const height = source.height;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(source, 0, 0, width, height);
-  // Coordinates are relative to the 1672x941 approved artwork's inner circular crest.
-  drawDosWordmark(ctx, width * 0.253, height * 0.397, height * 0.205, width * 0.255);
+  // Place the exact DOS COMMUNITY logo inside the empty cyan/silver crest.
+  // These coordinates align with the 1672x941 artwork's inner circular medallion.
+  drawBrandLogo(ctx, logo, width * 0.254, height * 0.397, height * 0.466, '#63DDF5');
   return canvas.toBuffer('image/png');
 }
 
@@ -483,10 +479,12 @@ function renderAdminSection({ title = '', subtitle = '', emblem = '' } = {}) {
 
 // A dedicated content card cropped from the chosen rules-message design.
 async function renderPanelPage({ guild = null, title = '', body = '', subtitle = '' } = {}) {
-  // Keep this as a clean, high-resolution decorative rules card. Arabic titles/body
-  // are rendered by Discord itself rather than the host canvas to prevent broken glyphs.
+  // Keep Arabic titles/body in Discord embeds, while branding the panel with the
+  // exact DOS logo in a small cyan-rimmed badge above the content area.
   const bg = await loadTemplate('content-panel-base.png');
-  const { canvas } = scaleCanvas(bg, 2.35);
+  const { canvas, ctx } = scaleCanvas(bg, 2.35);
+  const logo = await loadTemplate('dos-community-logo.png');
+  drawBrandLogo(ctx, logo, 365, 43, 60, '#63DDF5');
   return canvas.toBuffer('image/png');
 }
 

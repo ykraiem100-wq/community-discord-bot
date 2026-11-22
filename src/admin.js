@@ -52,6 +52,7 @@ async function homePayload(guildOrId) {
       { label: 'إدارة المتجر', value: 'shop', description: 'إضافة المنتجات وتعديلها والطلبات', emoji: '🛍️' },
       { label: 'الغرف الخاصة', value: 'rooms', description: 'متابعة الغرف ومددها وتجديدها وإغلاقها', emoji: '🏠' },
       { label: 'اللوحات والرسائل', value: 'content', description: 'تعديل القوانين والمعلومات والرسائل', emoji: '📝' },
+      { label: 'ترحيب الأعضاء الجدد', value: 'join_welcome', description: 'رسالة صغيرة عند دخول عضو جديد وتحديد الروم والإيموجي', emoji: '👋' },
       { label: 'تشغيل وإيقاف الأنظمة', value: 'features', description: 'إيقاف أو تشغيل كل نظام', emoji: '⏯️' },
       { label: 'العملات والمستويات', value: 'economy', description: 'تعديل XP والتحويل ومتطلبات المستويات وقناة الإشعارات', emoji: '📈' },
       { label: 'أوامر إدارة الأعضاء', value: 'member_tools', description: 'إضافة عملات وXP وإعادة ضبط عضو مع تأكيد', emoji: '🛠️' },
@@ -140,6 +141,40 @@ function contentAdminPayload(guildId, notice = '') {
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة الرئيسية').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
   ] }, 'اللوحات والرسائل', 'تعديل القوانين ورسالة الترحيب والتحكم بأزرارها', 'CONTENT');
 }
+function joinWelcomePayload(guildId, notice = '') {
+  const enabled = database.getConfig(guildId, 'join_welcome_enabled', '1') !== '0';
+  const channelId = database.getConfig(guildId, 'join_welcome_channel_id', '') || database.settings(guildId).welcome_channel_id || '';
+  const template = database.getConfig(guildId, 'join_welcome_text', '🌟 First message from {user}');
+  const emoji = database.getConfig(guildId, 'join_welcome_emoji', '👋');
+  const previewText = String(template).replace(/\{user\}/g, '@NewMember').replace(/\{username\}/g, 'NewMember').replace(/\{server\}/g, 'DOS COMMUNITY').replace(/^\s*-#\s*/, '');
+  const description = [
+    `**الحالة:** ${enabled ? '🟢 مفعّل' : '🔴 متوقف'}`,
+    `**قناة الترحيب:** ${channelId ? `<#${channelId}>` : 'لم يتم تحديدها — اختر الشات العام أدناه'}`,
+    `**الإيموجي بجانب الرسالة:** ${emoji}`,
+    '',
+    '**شكل الرسالة التي ستظهر:**',
+    `-# ${previewText}`,
+    '',
+    'استخدم `{user}` لمنشن العضو، و`{username}` لاسمه، و`{server}` لاسم السيرفر. ستُرسل الرسالة كنص صغير مباشرة دون Embed أو إطار.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:join-welcome:edit').setLabel('تعديل النص والإيموجي').setEmoji('✏️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:join-welcome:toggle').setLabel(enabled ? 'إيقاف الترحيب' : 'تفعيل الترحيب').setEmoji(enabled ? '⏸️' : '▶️').setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin:join-welcome:test').setLabel('إرسال تجربة').setEmoji('🧪').setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId('admin:join-welcome:channel').setPlaceholder('اختر الشات العام الذي يستقبل رسائل الترحيب').setChannelTypes(ChannelType.GuildText)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:join-welcome:clear-channel').setLabel('إلغاء تحديد القناة').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ];
+  return withSectionImage({ embeds: [adminEmbed('👋 ترحيب الأعضاء الجدد', description)], components: rows }, 'ترحيب الأعضاء الجدد', 'إعداد رسالة صغيرة تلقائية عند دخول عضو جديد', 'WELCOME');
+}
+
 function featuresPayload(guildId) {
   const rows = [];
   for (let i = 0; i < FEATURES.length; i += 4) {
@@ -282,12 +317,52 @@ async function handleAdminInteraction(interaction, client) {
     const payload = section === 'shop' ? await shopAdminPayload(interaction.guildId)
       : section === 'rooms' ? roomsPayload(interaction.guildId)
       : section === 'content' ? contentAdminPayload(interaction.guildId)
+      : section === 'join_welcome' ? joinWelcomePayload(interaction.guildId)
       : section === 'features' ? featuresPayload(interaction.guildId)
       : section === 'economy' ? economyPayload(interaction.guildId)
       : section === 'member_tools' ? memberToolsPayload()
       : section === 'roles' ? rolesPayload(interaction.guildId)
       : section === 'level_roles' ? levelRolesPayload(interaction.guildId) : salesPayload(interaction.guildId);
     return interaction.update(payload);
+  }
+  if (parts[1] === 'join-welcome' && parts[2] === 'edit') {
+    const template = database.getConfig(interaction.guildId, 'join_welcome_text', '🌟 First message from {user}');
+    const emoji = database.getConfig(interaction.guildId, 'join_welcome_emoji', '👋');
+    const modal = new ModalBuilder().setCustomId('admin:join-welcome:save').setTitle('تعديل رسالة دخول الأعضاء')
+      .addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('template').setLabel('النص — استخدم {user} لمنشن العضو').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(450).setValue(String(template).replace(/^\s*-#\s*/, ''))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('emoji').setLabel('إيموجي الزر بجانب الرسالة').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setValue(emoji))
+      );
+    return interaction.showModal(modal);
+  }
+  if (parts[1] === 'join-welcome' && parts[2] === 'toggle') {
+    const enabled = database.getConfig(interaction.guildId, 'join_welcome_enabled', '1') !== '0';
+    database.setConfig(interaction.guildId, 'join_welcome_enabled', enabled ? '0' : '1', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'join_welcome_toggle', String(!enabled));
+    return interaction.update(joinWelcomePayload(interaction.guildId, enabled ? 'تم إيقاف رسالة الترحيب.' : 'تم تفعيل رسالة الترحيب.'));
+  }
+  if (parts[1] === 'join-welcome' && parts[2] === 'channel' && interaction.isChannelSelectMenu()) {
+    const channelId = interaction.values[0];
+    database.setConfig(interaction.guildId, 'join_welcome_channel_id', channelId, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'join_welcome_channel', channelId);
+    return interaction.update(joinWelcomePayload(interaction.guildId, `تم تعيين قناة الترحيب إلى <#${channelId}>.`));
+  }
+  if (parts[1] === 'join-welcome' && parts[2] === 'clear-channel') {
+    database.setConfig(interaction.guildId, 'join_welcome_channel_id', '', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'join_welcome_channel', 'auto');
+    return interaction.update(joinWelcomePayload(interaction.guildId, 'تم إلغاء القناة المخصصة. سيحاول البوت استخدام قناة باسم general أو الشات العام ثم قناة النظام.'));
+  }
+  if (parts[1] === 'join-welcome' && parts[2] === 'test') {
+    const { sendJoinWelcome } = require('./join-welcome');
+    try {
+      const testMember = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+      const message = testMember ? await sendJoinWelcome(testMember, { test: true }) : null;
+      if (!message) return interaction.reply({ content: 'لم تُرسل التجربة. تأكد أن الترحيب مفعّل وأن قناة الترحيب محددة وأن للبوت صلاحية إرسال الرسائل.', flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: `✅ تم إرسال رسالة التجربة في ${message.channel}.`, flags: MessageFlags.Ephemeral });
+    } catch (error) {
+      console.error('[ADMIN] Join welcome test failed:', error);
+      return interaction.reply({ content: 'تعذّر إرسال التجربة: ' + error.message, flags: MessageFlags.Ephemeral });
+    }
   }
   if (parts[1] === 'member-reset' && ['confirm','cancel'].includes(parts[2])) {
     const targetId = parts[3];
@@ -494,6 +569,17 @@ async function handleAdminModal(interaction) {
   const parts = interaction.customId.split(':');
   if (parts[0] !== 'admin') return false;
   if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content: 'هذه العملية للإدارة فقط.', flags: MessageFlags.Ephemeral });
+  if (parts[1] === 'join-welcome' && parts[2] === 'save') {
+    const template = interaction.fields.getTextInputValue('template').trim().replace(/^\s*-#\s*/, '');
+    const emoji = interaction.fields.getTextInputValue('emoji').trim();
+    if (!template || template.length > 450 || !emoji || emoji.length > 80 || /[\r\n]/.test(emoji)) {
+      return interaction.reply({ content: 'أدخل نصاً صالحاً وإيموجياً واحداً أو رمز إيموجي مخصص.', flags: MessageFlags.Ephemeral });
+    }
+    database.setConfig(interaction.guildId, 'join_welcome_text', template, interaction.user.id);
+    database.setConfig(interaction.guildId, 'join_welcome_emoji', emoji, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'join_welcome_update', JSON.stringify({ template, emoji }));
+    return interaction.reply({ content: '✅ تم حفظ نص وإيموجي الترحيب. سيُستخدمان مع كل عضو جديد يدخل السيرفر.', flags: MessageFlags.Ephemeral });
+  }
   if (parts[1] === 'level-role' && parts[2] === 'save') {
     const kind = parts[3] === 'voice' ? 'voice' : parts[3] === 'write' ? 'text' : null;
     const level = Number(interaction.fields.getTextInputValue('level'));
@@ -569,4 +655,4 @@ async function handleAdminModal(interaction) {
   return false;
 }
 
-module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, contentAdminPayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };
+module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, contentAdminPayload, joinWelcomePayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };
