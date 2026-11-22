@@ -100,6 +100,27 @@ function drawCircleImage(ctx, image, x, y, size, border = C.cyan, lineWidth = 2,
   }
   ctx.restore();
 }
+
+// Fill a circular aperture with an image using cover-cropping. Unlike the older
+// helper this does not add another outline: the wallet/welcome templates already
+// contain their own metallic rings, so the image must meet the inner ring exactly.
+function drawCircleCover(ctx, image, x, y, size, overscan = 1) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+  ctx.clip();
+  if (image) {
+    const scale = Math.max(size / image.width, size / image.height) * Math.max(1, Number(overscan) || 1);
+    const drawWidth = image.width * scale;
+    const drawHeight = image.height * scale;
+    ctx.drawImage(image, x + (size - drawWidth) / 2, y + (size - drawHeight) / 2, drawWidth, drawHeight);
+  } else {
+    const g = ctx.createLinearGradient(x, y, x + size, y + size);
+    g.addColorStop(0, '#15516D'); g.addColorStop(1, '#07121E');
+    ctx.fillStyle = g; ctx.fillRect(x, y, size, size);
+  }
+  ctx.restore();
+}
 function drawImageContain(ctx, image, x, y, width, height, radius = 8) {
   if (!image) return;
   const scale = Math.min(width / image.width, height / image.height);
@@ -189,11 +210,11 @@ async function renderWallet({ user, profile = {}, textProgress = {}, level = nul
   const avatarUrl = user && typeof user.displayAvatarURL === 'function'
     ? user.displayAvatarURL({ extension: 'png', size: 512 }) : null;
   const avatar = await loadSafeImage(avatarUrl);
-  // Clip the profile photo to a mathematically perfect circle (not a rounded square).
-  // The portrait opening is centered at (104,104) and is approximately 100px
-  // across. Use a 100px circular mask and a tiny 4% overscan so the avatar
-  // reaches the inside edge with no visible gap while leaving the silver rim clear.
-  drawCircleImage(ctx, avatar, 54, 54, 100, '#C8F4FF', 0.65, 1.04);
+  // Measured inner wallet aperture: center (105,105), 114px diameter.
+  // The earlier position was shifted right/up and undersized, leaving the
+  // template portrait visible as a gap around some real avatars. Fill the
+  // entire inner opening, up to the cyan inner rim, with a cover-cropped avatar.
+  drawCircleCover(ctx, avatar, 48, 48, 114, 1.015);
 
   const name = displayName || (user && (user.globalName || user.username)) || 'عضو DOS';
   drawText(ctx, name.startsWith('@') ? name : '@' + name, 210, 92, 17, C.white, 900, 'left', 235);
@@ -227,11 +248,10 @@ async function renderMemberWelcomeCard({ user = null, guild = null } = {}) {
     ? user.displayAvatarURL({ extension: 'png', size: 512 }) : null;
   const avatar = await loadSafeImage(avatarUrl);
   drawCircleImage(ctx, avatar, 84, 194, 520, '#55DDF5', 7);
-  const logo = await loadTemplate('dos-community-logo.png');
-  // The small logo aperture is about 202px across. Overscan the supplied
-  // circular logo slightly under an exact circular mask so its outer ring
-  // fills the whole opening instead of floating with a dark margin.
-  drawCircleImage(ctx, logo, 1413, 316, 202, '#55DDF5', 1.2, 1.05);
+  const logo = await loadTemplate('dos-community-logo-circle.png');
+  // The template's right medallion opening is centered at (1540,415),
+  // 208px across. Fit the trimmed DOS logo exactly inside its inner cyan rim.
+  drawCircleCover(ctx, logo, 1436, 311, 208, 1.0);
 
   // Owner-requested fixed brand lockup: editable member copy remains outside
   // the artwork, while this central identity text is part of the image.
