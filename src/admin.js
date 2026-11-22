@@ -392,10 +392,10 @@ function levelRolesPayload(guildId) {
   const text = database.roles(guildId,'text');
   const voice = database.roles(guildId,'voice');
   const list = (rows) => rows.map((row) => `المستوى ${row.level}: <@&${row.role_id}>`).join('\n') || 'لا توجد رتب محددة بعد.';
-  return withSectionImage({ embeds: [adminEmbed('🏅 رتب المستويات', `**رتب الكتابة**\n${list(text)}\n\n**رتب الصوت**\n${list(voice)}\n\nعند بلوغ المستوى المحدد، يمنح البوت العضو الرتبة المناسبة تلقائياً.`)], components: [
+  return withSectionImage({ embeds: [adminEmbed('🏅 رتب المستويات', `**رتب الكتابة**\n${list(text)}\n\n**رتب الصوت**\n${list(voice)}\n\nعند بلوغ مستوى جديد، يمنح البوت العضو رتبته الجديدة ويسحب رتب المستويات السابقة من نفس المسار تلقائياً. رتب مسار الكتابة لا تؤثر على رتب مسار الصوت.`)], components: [
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:level-role:write').setLabel('إضافة رتبة مستوى كتابة').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:level-role:voice').setLabel('إضافة رتبة مستوى صوت').setStyle(ButtonStyle.Primary)),
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
-  ] }, 'رتب المستويات', 'اربط الرتب بمستويات الخبرة الكتابية والصوتية', 'LEVELS');
+  ] }, 'رتب المستويات', 'اربط رتب الكتابة والصوت؛ عند الترقية يمنح البوت رتبة المستوى الجديد ويسحب رتب المستويات السابقة من نفس المسار تلقائياً', 'LEVELS');
 }
 function roomsPayload(guildId) {
   const rooms = database.activeRooms(guildId);

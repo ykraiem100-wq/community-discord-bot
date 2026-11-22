@@ -15,6 +15,7 @@ const { sendMemberWelcomeCard } = require('./member-welcome');
 const { tickDailyQuestions, checkDailyQuestionAnswer } = require('./daily-questions');
 const { memberTasksPayload, handleTaskInteraction, handleTaskModal, grantTaskReward, publishTaskRewardMessage } = require('./tasks');
 const { getBoosterMultiplier, applyXpMultiplier } = require('./booster-xp');
+const { getLevelRoleTransition } = require('./level-roles');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
 const { broadcastStatusText, processDmBroadcastTick } = require('./broadcast');
 
@@ -171,14 +172,48 @@ async function topPayload(guild, kind, period) {
   return { files: [new AttachmentBuilder(image, { name: 'dos-top.png' })] };
 }
 async function assignLevelRole(member, kind, level) {
-  if (!member || !level) return;
-  const configured = database.roles(member.guild.id,kind).filter((row) => level >= row.level);
-  if (!configured.length) return;
-  const role = member.guild.roles.cache.get(configured[configured.length-1].role_id);
-  const topRole = member.guild.members.me && member.guild.members.me.roles.highest;
-  if (!role || !topRole || role.position >= topRole.position || member.roles.cache.has(role.id)) return;
-  try { await member.roles.add(role,`Reached ${kind} level ${level}`); }
-  catch (error) { console.error('[LEVEL ROLE]',error.message); }
+  if (!member || !member.guild || !Number.isSafeInteger(Number(level)) || Number(level) < 1) return false;
+  const guild = member.guild;
+  const otherKind = kind === 'text' ? 'voice' : 'text';
+  const transition = getLevelRoleTransition(
+    database.roles(guild.id, kind),
+    Number(level),
+    database.roles(guild.id, otherKind)
+  );
+  if (!transition.selected) return false;
+
+  const role = guild.roles.cache.get(transition.selected.role_id)
+    || await guild.roles.fetch(transition.selected.role_id).catch(() => null);
+  const topRole = guild.members.me && guild.members.me.roles.highest;
+  if (!role || !topRole || role.position >= topRole.position) {
+    console.warn('[LEVEL ROLE] The reached-level role is missing or above the bot role.');
+    return false;
+  }
+
+  // Grant the new level role first. If Discord rejects it, keep the old role.
+  if (!member.roles.cache.has(role.id)) {
+    try {
+      await member.roles.add(role, `Reached ${kind} level ${level}`);
+    } catch (error) {
+      console.error('[LEVEL ROLE] Could not add the new role:', error.message);
+      return false;
+    }
+  }
+
+  // Remove all earlier roles from this same progression, including any
+  // stacked legacy rewards, but preserve roles configured for the other track.
+  for (const previousRoleId of transition.previousRoleIds) {
+    if (!member.roles.cache.has(previousRoleId)) continue;
+    const previousRole = guild.roles.cache.get(previousRoleId)
+      || await guild.roles.fetch(previousRoleId).catch(() => null);
+    if (!previousRole || previousRole.position >= topRole.position) continue;
+    try {
+      await member.roles.remove(previousRole, `Replaced by ${kind} level ${level}`);
+    } catch (error) {
+      console.error(`[LEVEL ROLE] Could not remove previous role ${previousRoleId}:`, error.message);
+    }
+  }
+  return true;
 }
 async function sendLevelUpNotice(channel, user, level) {
   if (!channel || !channel.isTextBased() || typeof channel.send !== 'function') return;
