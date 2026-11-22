@@ -51,7 +51,9 @@ try {
   assert.equal(db.activeRooms(guild).some((room)=>room.id===roomId),false);
 
   db.setConfig(guild,'message_xp',11,'admin');
+  db.setConfig(guild,'level_first_six','100,150,250,400,500,600','admin');
   assert.equal(db.getConfig(guild,'message_xp','7'),'11');
+  assert.deepEqual(db.curveForGuild(guild).firstLevels,[100,150,250,400,500,600]);
   assert.ok(db.leaderboard(guild,'text','daily').length > 0);
   db.close();
   console.log('Feature database tests passed.');
