@@ -33,6 +33,7 @@ The bot needs View Channel, Send Messages, Read Message History, Embed Links, Ma
 
 ## Commands
 
+- `r` — open your wallet with the bare single-letter shortcut (no prefix).
 - `/wallet` or `.محفظتي` — wallet.
 - `/top` or writing `Top` — leaderboard. `/top` supports all XP, coins, text XP, voice XP, and all-time/daily/weekly/monthly periods.
 - `/shop` or `.المتجر` — DOS shop.
