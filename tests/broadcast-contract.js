@@ -31,14 +31,15 @@ assert.match(admin, /admin:command-toggle:/);
 assert.match(welcome, /content: description/);
 assert.match(welcome, /files: \[new AttachmentBuilder/);
 assert.doesNotMatch(welcome, /EmbedBuilder/);
-const walletCall = render.match(/drawCircleImage\(ctx, avatar, (\d+), (\d+), (\d+), '#C8F4FF'/);
-assert.ok(walletCall, 'wallet avatar must be drawn into the round portrait aperture');
-assert.equal(Number(walletCall[3]), 100, 'wallet avatar must fill the portrait opening');
+const walletCall = render.match(/drawCircleCover\(ctx, avatar, (\d+), (\d+), (\d+), 1\.015\)/);
+assert.ok(walletCall, 'wallet avatar must be cover-cropped into the round portrait aperture');
+assert.equal(Number(walletCall[3]), 114, 'wallet avatar must cover the full portrait opening');
 const welcomeRenderer = render.match(/async function renderMemberWelcomeCard\([\s\S]*?\n}\n/);
 assert.ok(welcomeRenderer);
 assert.match(welcomeRenderer[0], /Welcome To/, 'welcome artwork must include its cyan brand text');
 assert.match(welcomeRenderer[0], /drawText\(ctx, 'DOS'/, 'welcome artwork must include the unbracketed DOS wordmark');
-assert.match(welcomeRenderer[0], /drawCircleImage\(ctx, logo, 1413, 316, 202, '#55DDF5', 1\.2, 1\.05\)/, 'welcome logo must fill its circular aperture without gaps');
+assert.match(welcomeRenderer[0], /loadTemplate\('dos-community-logo-circle\.png'\)/, 'welcome must use the tightly-cropped logo asset');
+assert.match(welcomeRenderer[0], /drawCircleCover\(ctx, logo, 1436, 311, 208, 1\.0\)/, 'welcome logo must be centered and cover the circular aperture');
 assert.doesNotMatch(welcomeRenderer[0], /『|』|□/, 'welcome DOS wordmark must not render unsupported square brackets');
 
 // DM broadcasts are explicitly consent-based and throttled.
