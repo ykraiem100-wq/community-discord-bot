@@ -46,7 +46,7 @@ The bot needs View Channel, Send Messages, Read Message History, Embed Links, Ma
 
 ## Main panel and content
 
-Use `/admin-panel` → **رتب المستويات** to link separate writing and voice reward roles to level thresholds. Use `/admin-panel` → **اللوحات والرسائل** to edit the title and body for the main panel, rules, server information, interaction notifications, server system, and events. The five public panel buttons are **قوانين السيرفر**, **معلومات السيرفر**, **رتب التفاعل**, **نظام السيرفر**, and **الفعاليات** (the description retains `Arena & Events`). Button responses are ephemeral/private to the member. Use **نشر / تحديث اللوحة الرئيسية** to publish the panel in a chosen text channel.
+Use `/admin-panel` → **رتب المستويات** to link separate writing and voice reward roles to level thresholds. Use `/admin-panel` → **اللوحات والرسائل** to edit the title and body for the welcome panel, rules, information, notification roles, system, events/Arena, Social Media, Apply, and New/News. The welcome image includes the current server icon and name, bilingual welcome copy, and a signature using the server owner's display name. Its seven buttons match the supplied reference: **Server Rules**, **Read Information**, **Roles**, **Social Media**, **Apply**, **New**, and **Arena**. Button responses are ephemeral/private to the member. Use **نشر / تحديث اللوحة الرئيسية** to publish the panel in a chosen text channel.
 
 ## Economy and levels
 
@@ -56,13 +56,13 @@ Daily, weekly, and monthly TOP history starts accumulating from this release bec
 
 ## DOS SHOP
 
-Admins can add/edit/deactivate products and configure the shop channel and private-room category in `/admin-panel`. Product types: color, private text room, private voice room, existing Discord role, digital item, or manual fulfillment. Colors are presented from a 214-color palette, excluding pure black and pure white. Color selection uses private interaction pages; a Discord role is created/updated and assigned to the buyer. Create a role named `Member` (or `Members`, `عضو`, `الأعضاء`) before enabling color delivery; the custom color role is automatically positioned immediately above it. Keep the bot's highest role above the Member role so Discord permits this position change.
+Admins can add/edit/deactivate products and configure the shop channel and private-room category in `/admin-panel`. Product types: color, private text room, private voice room, existing Discord role, digital item, or manual fulfillment. A disabled-by-default `Colors` product is created for each server; edit its price and activate it before members can buy it. The public shop has a wide CREDITS SHOP mascot banner and a single Buy... dropdown, like the supplied reference; names, descriptions and prices are all driven by the editable product records. After purchasing Colors, members see a full-spectrum color wheel, can enter any HEX color, or choose from the paged 214-color quick palette. The bot creates/updates the Discord color role and assigns it to the buyer. Create a role named `Member` (or `Members`, `عضو`, `الأعضاء`) before enabling color delivery; the custom color role is automatically positioned immediately above it. Keep the bot's highest role above the Member role so Discord permits this position change.
 
 Private room products use DOS Coin, last 30 days, send a reminder three days before expiry, and can be renewed for another 30 days. Renewal adds time to the current expiry rather than discarding remaining days. Expired channels are deleted automatically. The room owner can manage their room channel.
 
 Cash products are separate from DOS Coin. A cash order can show an external HTTPS payment link, but payment is **not automatically verified** by the bot. An Administrator must verify receipt in the external payment provider before approving delivery. Cash refunds, if needed, are handled manually outside Discord. Automatic payment capture requires a separately integrated payment provider/webhook and is not included in this version. To keep room renewals reliable, private-room products are restricted to DOS Coin at present.
 
-The DOS SHOP uses the exact approved six-card artwork (three columns × two rows) and displays up to six products per page. Product names, prices and uploaded product images are read from the configured product records; the real purchase select menu and page buttons remain below the PNG.
+The DOS SHOP uses a generated DOS mascot banner with a single Buy... dropdown containing up to 25 products per page. Product names and prices are read from configured product records; page controls appear only when more than 25 products are active. The Colors item is created automatically but stays disabled until an administrator sets its price and enables it.
 
 ## Data and tests
 
@@ -76,23 +76,24 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 
 - `/wallet` و`.محفظتي` يرسلان بطاقة المحفظة كملف PNG مباشر، مع فصل تقدّم الكتابة عن الصوت.
 - `/top` و`TOP` يرسلان صورة المتصدرين كملف PNG مباشر.
-- `/shop` و`.المتجر` يرسلان صورة DOS SHOP الأصلية بثلاثة أعمدة وصفّين (حتى 6 منتجات في الصفحة) مع قائمة شراء وأزرار صفحات Discord أسفل الصورة.
-- لوحة DOS الرئيسية وصفحات القوانين والمعلومات والنظام والفعاليات تُرسل كصور PNG مباشرة؛ وتبقى أزرار التفاعل الحقيقية كعناصر Discord أسفل صورة اللوحة.
-- تستخدم خلفيات PNG المقتطعة من صورك الأصلية داخل `assets/templates/`، ويضيف البوت فوقها البيانات الحقيقية في المواضع المتغيرة فقط. صور المصدر الكاملة والقصاصات المرجعية موجودة في `assets/design-references/`.
+- `/shop` و`.المتجر` يرسلان صورة CREDITS SHOP العريضة مع قائمة Buy... تفاعلية (حتى 25 منتجاً في الصفحة)، وتفتح عملية شراء Colors عجلة ألوان كاملة مع إدخال HEX.
+- لوحة الترحيب تُرسل كصورة PNG جديدة بخلفية فحمية وشريط أحمر وشعار السيرفر واسمه ونص عربي/إنجليزي وتوقيع الإدارة، وتتبعها أزرار Discord السبعة. صفحات القوانين والمعلومات والنظام والفعاليات تُرسل كصور PNG أيضاً.
+- لكل قسم في لوحة الإدارة صورة رأس مخصصة بنفس أسلوب DOS CONTROL PANEL؛ تتغير بحسب القسم (المتجر، الغرف، الرسائل، الأنظمة، XP، الأعضاء، الرتب، والطلبات). كما تستخدم صورة المتجر رسمة التاجر DOS المخصصة في `assets/templates/shop-mascot.png`.
 - لا يجري تعديل مخطط بيانات الأعضاء أو حذف قاعدة البيانات بسبب إضافة الرسومات.
 
 ## القوالب والصور المعتمدة
 
-القوالب التشغيلية هي قصاصات أصلية من الصور التي اخترتها، وليست إعادة تصميم. يحتفظ البوت بالإطار المعدني والشعار والزخرفة والتوزيع كما في المرجع، ويضع البيانات المتغيرة فوق المناطق المناسبة فقط.
+تجمع القوالب التشغيلية بين عناصر DOS السابقة والتصميم الجديد المستلهم من مراجعك. صورة الترحيب ولوحات الإدارة والمتجر تتولد من Canvas وتستخدم شعار السيرفر أو بيانات القسم/المنتج بشكل ديناميكي.
 
 - `wallet-base.png`: بطاقة المحفظة.
 - `leaderboard-base.png`: لوحة TOP والمتصدرين.
-- `shop-base.png`: واجهة DOS SHOP الأصلية بستة مواضع فارغة للمنتجات، مع الإبقاء على الشارات وإطارات الأسعار.
-- `main-panel-base.png`: لوحة السيرفر العامة بخمسة أقسام؛ نص الترحيب يُكتب في المساحة الأصلية الفارغة، والأزرار الحقيقية تُرسل أسفلها.
+- `shop-base.png`: قالب المتجر القديم محفوظ للتوافق مع الأصول السابقة.
+- `shop-mascot.png`: رسمة التاجر الذهبية الجديدة المستخدمة في CREDITS SHOP.
+- `main-panel-base.png`: قالب قديم محفوظ للتوافق؛ اللوحة الرئيسية الجديدة تُرسم ديناميكياً مع شعار السيرفر وأزرار الترحيب السبعة.
 - `content-panel-base.png`: بطاقة رسالة القوانين/المعلومات؛ ويُرفق النص الكامل في رسالة Discord حتى لا يُقص المحتوى الطويل.
 - `level-system-base.png`: إنفوجرافيك مراحل المستويات.
 - `level-up-base.png`: إعلان الوصول إلى مستوى جديد.
-- `admin-dashboard-base.png`: صورة لوحة الإدارة الأصلية كما هي؛ تُعرض الإحصائيات الحية في بطاقة Discord تحتها حتى لا يتغير شكل الصورة المختارة.
-- `admin-shop-base.png`: صورة إدارة المتجر الأصلية كما هي؛ تظهر المنتجات الفعلية وأسعارها وحالاتها في بطاقة Discord وقائمة الاختيار أسفلها.
+- `admin-dashboard-base.png`: صورة لوحة الإدارة السابقة محفوظة؛ إحصائيات لوحة الإدارة الفعلية تظهر معها.
+- `admin-shop-base.png`: صورة إدارة المتجر السابقة محفوظة؛ تُعرض المنتجات الفعلية وأسعارها وحالاتها في قائمة التحكم.
 
 الصور المصدرية الخمس والقصاصات موجودة في `assets/design-references/`. خريطة ربط الملفات ووظائفها في `assets/templates/images-map.json`. لا تحذف ملفات القوالب التسعة ولا تغيّر أسماءها. لا تحتوي الحزمة على قاعدة بيانات الإنتاج أو ملف `.env` أو رمز Discord.
