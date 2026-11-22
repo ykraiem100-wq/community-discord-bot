@@ -16,6 +16,8 @@ assert.ok(fs.existsSync(path.join(root, 'assets/templates/dos-community-logo-cir
 assert.ok(fs.existsSync(path.join(root, 'assets/templates/member-welcome-base.png')));
 assert.match(render, /function renderShopHeader\(/);
 assert.match(render, /function renderMemberWelcomeCard\(/);
+assert.match(render, /TEMPLATE_FALLBACKS/);
+assert.match(render, /'dos-community-logo-circle\.png': \['dos-community-logo\.png'\]/);
 assert.match(render, /function drawBrandLogo\(/);
 assert.match(render, /loadTemplate\('dos-community-logo\.png'\)/);
 assert.match(render, /drawBrandLogo\(ctx, logo, 600, 222, 278/);
