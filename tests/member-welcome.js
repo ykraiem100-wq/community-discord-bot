@@ -22,5 +22,7 @@ assert.match(index, /sendMemberWelcomeCard\(member\)/);
 assert.match(index, /getBoosterMultiplier\(message\.member/);
 assert.match(index, /applyXpMultiplier\(elapsedMinutes \* voiceRate, multiplier\)/);
 assert.match(render, /function renderMemberWelcomeCard\(/);
-assert.match(render, /drawCircleImage\(ctx, avatar, 46, 53, 113/);
+assert.match(render, /drawCircleImage\(ctx, avatar, 56, 48, 90/);
+assert.match(render, /drawText\(ctx, 'Welcome To'/);
+assert.match(render, /drawText\(ctx, 'DOS'/);
 console.log('Member welcome card and controls tests passed.');

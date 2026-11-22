@@ -60,4 +60,16 @@ assert.match(database, /addColumn\('private_rooms', 'panel_message_id'/);
 assert.match(database, /addColumn\('private_rooms', 'voice_locked'/);
 assert.match(render, /DOS SHOP/);
 assert.match(render, /String\(subtitle/);
+assert.match(render, /drawCircleImage\(ctx, avatar, 56, 48, 90/);
+assert.match(render, /drawText\(ctx, 'Welcome To'/);
+assert.match(render, /drawText\(ctx, 'DOS'/);
+assert.match(admin, /value: 'daily_questions'/);
+assert.match(admin, /value: 'tasks'/);
+assert.match(admin, /value: 'invite_rewards'/);
+assert.match(database, /CREATE TABLE IF NOT EXISTS daily_question_runs/);
+assert.match(database, /CREATE TABLE IF NOT EXISTS guild_tasks/);
+assert.match(index, /invite_reward_amount/);
+assert.match(index, /checkDailyQuestionAnswer/);
+assert.match(index, /setTaskMessageProgress/);
+
 console.log('DOS UI, admin access, named colors, 30-day expiry, voice controls and image contracts passed.');

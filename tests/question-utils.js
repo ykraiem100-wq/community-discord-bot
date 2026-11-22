@@ -1,0 +1,12 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { QUESTIONS } = require('../src/question-bank');
+const { normalizeAnswer, answerMatches } = require('../src/question-utils');
+assert.ok(QUESTIONS.length >= 100, `expected at least 100 questions, got ${QUESTIONS.length}`);
+assert.equal(new Set(QUESTIONS.map((row) => row[0])).size, QUESTIONS.length, 'question keys must be unique');
+assert.ok(QUESTIONS.every((row) => Array.isArray(row) && row.length === 3 && row.every((cell) => typeof cell === 'string' && cell.length > 0)));
+assert.equal(answerMatches('عَمّان', 'عمّان|عمان'), true);
+assert.equal(answerMatches('القَاهِرَة', 'القاهرة'), true);
+assert.equal(answerMatches('اجابة خاطئة', 'القاهرة'), false);
+assert.equal(normalizeAnswer('أإآ ى ؤ ئ'), 'ااا ي و ي');
+console.log(`Question bank and Arabic answer normalization tests passed (${QUESTIONS.length} questions).`);
