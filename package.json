@@ -11,8 +11,8 @@
   "scripts": {
     "start": "node src/index.js",
     "prestart": "npm run check",
-    "check": "node --check src/index.js && node --check src/database.js && node --check src/render.js && node --check src/wallet.js && node --check src/levels.js && node --check src/panels.js && node --check src/shop.js && node --check src/admin.js && node --check tests/smoke.js && node --check tests/migration.js && node --check tests/levels.js && node --check tests/features.js && node --check tests/render.js && node --check tests/ui-contract.js",
-    "test": "node tests/smoke.js && node tests/migration.js && node tests/levels.js && node tests/features.js && node tests/render.js && node tests/ui-contract.js"
+    "check": "node --check src/index.js && node --check src/database.js && node --check src/render.js && node --check src/wallet.js && node --check src/levels.js && node --check src/panels.js && node --check src/shop.js && node --check src/admin.js && node --check src/join-welcome.js && node --check src/welcome-text.js && node --check tests/join-welcome.js && node --check tests/smoke.js && node --check tests/migration.js && node --check tests/levels.js && node --check tests/features.js && node --check tests/render.js && node --check tests/ui-contract.js",
+    "test": "node tests/smoke.js && node tests/migration.js && node tests/levels.js && node tests/features.js && node tests/render.js && node tests/ui-contract.js && node tests/join-welcome.js"
   },
   "dependencies": {
     "better-sqlite3": "12.4.1",

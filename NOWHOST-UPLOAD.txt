@@ -36,3 +36,6 @@ OWNER_ID (اختياري), BOT_PREFIX, DATA_DIR, TZ.
 الفحوصات:
 - فحص صياغة JavaScript: npm run check
 - الاختبارات: npm test (بعد اكتمال npm install)
+
+--- New member welcome message ---
+After deploying, open /admin-panel → ترحيب الأعضاء الجدد. Select the public chat channel, edit the small-text message and its emoji button, then use إرسال تجربة. The default text is `🌟 First message from {user}`; supported placeholders are `{user}`, `{username}`, and `{server}`. Enable Server Members Intent in the Discord Developer Portal and grant View Channel, Send Messages, and Add Reactions permissions.
