@@ -11,7 +11,7 @@ const {
 async function main() {
   for (const filename of [
     'wallet-base.png', 'leaderboard-base.png', 'shop-base.png', 'main-panel-base.png',
-    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png', 'shop-mascot.png'
+    'content-panel-base.png', 'level-system-base.png', 'level-up-base.png', 'admin-dashboard-base.png', 'admin-shop-base.png', 'shop-crest-bg.png'
   ]) {
     assert.ok(fs.existsSync(path.join(TEMPLATE_DIR, filename)), `missing current template ${filename}`);
   }
