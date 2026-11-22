@@ -56,13 +56,13 @@ Daily, weekly, and monthly TOP history starts accumulating from this release bec
 
 ## DOS SHOP
 
-Admins can add/edit/deactivate products and configure the shop channel and private-room category in `/admin-panel`. Product types: color, private text room, private voice room, existing Discord role, digital item, or manual fulfillment. A disabled-by-default `Colors` product is created for each server; edit its price and activate it before members can buy it. The public shop has a wide CREDITS SHOP mascot banner and a single Buy... dropdown, like the supplied reference; names, descriptions and prices are all driven by the editable product records. After purchasing Colors, members see a full-spectrum color wheel, can enter any HEX color, or choose from the paged 214-color quick palette. The bot creates/updates the Discord color role and assigns it to the buyer. Create a role named `Member` (or `Members`, `عضو`, `الأعضاء`) before enabling color delivery; the custom color role is automatically positioned immediately above it. Keep the bot's highest role above the Member role so Discord permits this position change.
+Admins can add/edit/deactivate products and configure the shop channel and private-room category in `/admin-panel`. Product types: color, private text room, private voice room, existing Discord role, digital item, or manual fulfillment. A disabled-by-default `Colors` product is created for each server; edit its price and activate it before members can buy it. The public shop has a wide CREDITS SHOP banner with the current Discord server icon displayed in the gold medallion and the live server name under the title, plus a single Buy... dropdown, like the supplied reference; names, descriptions and prices are all driven by the editable product records. After purchasing Colors, members see a full-spectrum color wheel, can enter any HEX color, or choose from the paged 214-color quick palette. The bot creates/updates the Discord color role and assigns it to the buyer. Create a role named `Member` (or `Members`, `عضو`, `الأعضاء`) before enabling color delivery; the custom color role is automatically positioned immediately above it. Keep the bot's highest role above the Member role so Discord permits this position change.
 
 Private room products use DOS Coin, last 30 days, send a reminder three days before expiry, and can be renewed for another 30 days. Renewal adds time to the current expiry rather than discarding remaining days. Expired channels are deleted automatically. The room owner can manage their room channel.
 
 Cash products are separate from DOS Coin. A cash order can show an external HTTPS payment link, but payment is **not automatically verified** by the bot. An Administrator must verify receipt in the external payment provider before approving delivery. Cash refunds, if needed, are handled manually outside Discord. Automatic payment capture requires a separately integrated payment provider/webhook and is not included in this version. To keep room renewals reliable, private-room products are restricted to DOS Coin at present.
 
-The DOS SHOP uses a generated DOS mascot banner with a single Buy... dropdown containing up to 25 products per page. Product names and prices are read from configured product records; page controls appear only when more than 25 products are active. The Colors item is created automatically but stays disabled until an administrator sets its price and enables it.
+The DOS SHOP uses a generated gold-and-silver server-crest banner; the medallion is filled dynamically with the actual Discord server icon and the server name is shown under CREDITS SHOP. A single Buy... dropdown contains up to 25 products per page. Product names and prices are read from configured product records; page controls appear only when more than 25 products are active. The Colors item is created automatically but stays disabled until an administrator sets its price and enables it.
 
 ## Data and tests
 
@@ -78,7 +78,7 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 - `/top` و`TOP` يرسلان صورة المتصدرين كملف PNG مباشر.
 - `/shop` و`.المتجر` يرسلان صورة CREDITS SHOP العريضة مع قائمة Buy... تفاعلية (حتى 25 منتجاً في الصفحة)، وتفتح عملية شراء Colors عجلة ألوان كاملة مع إدخال HEX.
 - لوحة الترحيب تُرسل كصورة PNG جديدة بخلفية فحمية وشريط أحمر وشعار السيرفر واسمه ونص عربي/إنجليزي وتوقيع الإدارة، وتتبعها أزرار Discord السبعة. صفحات القوانين والمعلومات والنظام والفعاليات تُرسل كصور PNG أيضاً.
-- لكل قسم في لوحة الإدارة صورة رأس مخصصة بنفس أسلوب DOS CONTROL PANEL؛ تتغير بحسب القسم (المتجر، الغرف، الرسائل، الأنظمة، XP، الأعضاء، الرتب، والطلبات). كما تستخدم صورة المتجر رسمة التاجر DOS المخصصة في `assets/templates/shop-mascot.png`.
+- لكل قسم في لوحة الإدارة صورة رأس مخصصة بنفس أسلوب DOS CONTROL PANEL؛ تتغير بحسب القسم (المتجر، الغرف، الرسائل، الأنظمة، XP، الأعضاء، الرتب، والطلبات). كما تعرض صورة المتجر شعار السيرفر الفعلي داخل إطار الشعار، واسم السيرفر أسفل عنوان CREDITS SHOP؛ لا تستخدم رسمة صقر أو شخصية عامة.
 - لا يجري تعديل مخطط بيانات الأعضاء أو حذف قاعدة البيانات بسبب إضافة الرسومات.
 
 ## القوالب والصور المعتمدة
@@ -88,7 +88,7 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 - `wallet-base.png`: بطاقة المحفظة.
 - `leaderboard-base.png`: لوحة TOP والمتصدرين.
 - `shop-base.png`: قالب المتجر القديم محفوظ للتوافق مع الأصول السابقة.
-- `shop-mascot.png`: رسمة التاجر الذهبية الجديدة المستخدمة في CREDITS SHOP.
+- `shop-crest-bg.png`: خلفية إطار الشعار الذهبي والفضي؛ يضاف شعار السيرفر واسمه إليها بشكل ديناميكي عند إرسال المتجر.
 - `main-panel-base.png`: قالب قديم محفوظ للتوافق؛ اللوحة الرئيسية الجديدة تُرسم ديناميكياً مع شعار السيرفر وأزرار الترحيب السبعة.
 - `content-panel-base.png`: بطاقة رسالة القوانين/المعلومات؛ ويُرفق النص الكامل في رسالة Discord حتى لا يُقص المحتوى الطويل.
 - `level-system-base.png`: إنفوجرافيك مراحل المستويات.
