@@ -7,5 +7,8 @@
   "level-system-base.png": "src/render.js:renderLevelSystemPage",
   "level-up-base.png": "src/render.js:renderLevelUpBanner",
   "admin-dashboard-base.png": "src/render.js:renderAdminDashboard",
-  "admin-shop-base.png": "src/render.js:renderAdminShop"
+  "admin-shop-base.png": "src/render.js:renderAdminShop",
+  "admin-section-header (dynamic)": "src/render.js:renderAdminSection",
+  "color-wheel (dynamic)": "src/render.js:renderColorWheel",
+  "shop-crest-bg.png": "src/render.js:renderShopHeader(guild) — crest background; live guild icon and name are composited dynamically"
 }
