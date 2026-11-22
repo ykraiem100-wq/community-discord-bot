@@ -31,11 +31,27 @@ function registerFonts() {
 registerFonts();
 
 const templateCache = new Map();
+// Keep the member-welcome preview resilient when a host upload omitted the
+// tightly-cropped logo asset. The original approved DOS logo is shipped beside
+// it and has the same circular artwork, so it is a safe visual fallback.
+const TEMPLATE_FALLBACKS = Object.freeze({
+  'dos-community-logo-circle.png': ['dos-community-logo.png']
+});
 async function loadTemplate(filename) {
-  const full = path.join(TEMPLATE_DIR, filename);
-  if (!fs.existsSync(full)) throw new Error(`Missing approved DOS reference template: assets/templates/${filename}`);
-  if (!templateCache.has(filename)) templateCache.set(filename, loadImage(full));
-  return templateCache.get(filename);
+  const requested = path.join(TEMPLATE_DIR, filename);
+  let full = requested;
+  if (!fs.existsSync(full)) {
+    const fallbacks = TEMPLATE_FALLBACKS[filename] || [];
+    const fallback = fallbacks.map((candidate) => path.join(TEMPLATE_DIR, candidate)).find((candidate) => fs.existsSync(candidate));
+    if (!fallback) {
+      const expected = [filename, ...fallbacks].map((name) => `assets/templates/${name}`).join(' or ');
+      throw new Error(`Missing DOS template. Upload ${expected} to the bot project; keep assets/templates beside src.`);
+    }
+    full = fallback;
+    console.warn(`[PNG] Template ${filename} is missing; using approved fallback ${path.basename(fallback)}.`);
+  }
+  if (!templateCache.has(full)) templateCache.set(full, loadImage(full));
+  return templateCache.get(full);
 }
 async function loadSafeImage(source) {
   if (!source) return null;
