@@ -38,6 +38,9 @@ The bot needs View Channel, Send Messages, Read Message History, Embed Links, Ma
 - `/shop` or `.المتجر` — DOS shop.
 - `/color-selection order_id:<number>` — reopen a pending color selection if needed.
 - `/admin-panel` — private interactive DOS CONTROL PANEL (Administrators or `OWNER_ID` only).
+- `/add-coins member amount` and `.اضافة_عملات @عضو 500` — add DOS Coin (admin only).
+- `/add-xp member amount type` and `.اضافة_xp @عضو 500 كتابة` — add text or voice XP (admin only; XP-to-coin conversion is applied).
+- `/reset-member member` and `.reset @عضو` — show a confirmation before resetting the selected member's economy and activity data.
 - `.متصدرين كتابي`, `.متصدرين صوتي`, `.متصدرين عملات`, `.إحصائيات`, `.مساعدة`.
 - Existing admin commands `.تعيين_قناة` and `.رتبة_مستوى` remain available.
 
@@ -47,13 +50,13 @@ Use `/admin-panel` → **رتب المستويات** to link separate writing an
 
 ## Economy and levels
 
-Defaults remain 7 XP per ordinary text message, 9 XP per eligible voice minute, and 250 XP per DOS Coin. XP and coin rates can be changed from `/admin-panel`. Text and voice XP have separate levels. The level curve gradually increases requirements: levels 1–50 (easy to medium), 51–100 (medium to hard), then 101+ (hard). Admins can adjust each curve segment, subject to continuity checks. Disabling the economy and disabling levels are separate controls.
+Defaults remain 7 XP per ordinary text message, 9 XP per eligible voice minute, and 250 XP per DOS Coin. XP and coin rates can be changed from `/admin-panel`. Text and voice XP have separate levels. The default hardening curve requires 100, 150, 250, 400, 500 and 600 XP for levels 1–6; level 7 starts at 750 XP, then the requirement grows by 150 XP plus another 5 XP of growth per level. Administrators can customize the first six requirements and the later growth from `/admin-panel` → العملات والمستويات. They can optionally select a level-up notification channel there; if none is selected, text level-ups are announced in the channel that awarded XP and voice level-ups use the server system channel. Disabling the economy and disabling levels are separate controls.
 
 Daily, weekly, and monthly TOP history starts accumulating from this release because older versions did not record timestamped XP events. All-time totals are preserved.
 
 ## DOS SHOP
 
-Admins can add/edit/deactivate products and configure the shop channel and private-room category in `/admin-panel`. Product types: color, private text room, private voice room, existing Discord role, digital item, or manual fulfillment. Colors are presented from a 214-color palette, excluding pure black and pure white. Color selection uses private interaction pages; a Discord role is created/updated and assigned to the buyer.
+Admins can add/edit/deactivate products and configure the shop channel and private-room category in `/admin-panel`. Product types: color, private text room, private voice room, existing Discord role, digital item, or manual fulfillment. Colors are presented from a 214-color palette, excluding pure black and pure white. Color selection uses private interaction pages; a Discord role is created/updated and assigned to the buyer. Create a role named `Member` (or `Members`, `عضو`, `الأعضاء`) before enabling color delivery; the custom color role is automatically positioned immediately above it. Keep the bot's highest role above the Member role so Discord permits this position change.
 
 Private room products use DOS Coin, last 30 days, send a reminder three days before expiry, and can be renewed for another 30 days. Renewal adds time to the current expiry rather than discarding remaining days. Expired channels are deleted automatically. The room owner can manage their room channel.
 
@@ -64,6 +67,8 @@ The DOS SHOP uses the exact approved six-card artwork (three columns × two rows
 ## Data and tests
 
 SQLite file: `DATA_DIR/community.sqlite`. The migration retains existing member records and coin balances, adds the new settings/shop/room/content tables, and preserves old orders. Daily/weekly/monthly event history only starts with the new release.
+
+A member reset clears that member's coins, coin remainder, text/voice/total XP, messages, voice seconds and recent TOP event history after an explicit confirmation. It retains the member row, invite attribution, products, orders and all other members' data.
 
 Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. GitHub Actions checks syntax and runs tests on pushes and pull requests.
 
