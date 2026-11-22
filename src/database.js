@@ -44,7 +44,12 @@ db.exec(
   'CREATE TABLE IF NOT EXISTS admin_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, user_id TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL DEFAULT \'\', created_at INTEGER NOT NULL DEFAULT (unixepoch()));' +
   'CREATE TABLE IF NOT EXISTS invite_snapshots (guild_id TEXT NOT NULL, code TEXT NOT NULL, inviter_id TEXT, uses INTEGER NOT NULL DEFAULT 0, max_uses INTEGER NOT NULL DEFAULT 0, expires_at INTEGER, updated_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,code));' +
   'CREATE TABLE IF NOT EXISTS member_invites (guild_id TEXT NOT NULL, joined_user_id TEXT NOT NULL, inviter_id TEXT NOT NULL, invite_code TEXT NOT NULL, joined_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,joined_user_id));' +
-  'CREATE INDEX IF NOT EXISTS idx_member_invites_inviter ON member_invites(guild_id,inviter_id);'
+  'CREATE INDEX IF NOT EXISTS idx_member_invites_inviter ON member_invites(guild_id,inviter_id);' +
+  "CREATE TABLE IF NOT EXISTS daily_question_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, date_key TEXT NOT NULL, channel_id TEXT NOT NULL, question_key TEXT NOT NULL, question_text TEXT NOT NULL, answer_text TEXT NOT NULL, reward_coins INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', message_id TEXT, scheduled_at INTEGER NOT NULL, sent_at INTEGER, winner_id TEXT, answered_at INTEGER, created_at INTEGER NOT NULL DEFAULT (unixepoch()), UNIQUE(guild_id,date_key));" +
+  'CREATE INDEX IF NOT EXISTS idx_daily_question_open ON daily_question_runs(guild_id,status);' +
+  "CREATE TABLE IF NOT EXISTS guild_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', period TEXT NOT NULL DEFAULT 'daily' CHECK(period IN ('daily','weekly')), tracking_type TEXT NOT NULL DEFAULT 'manual' CHECK(tracking_type IN ('xp','messages','manual')), threshold INTEGER NOT NULL DEFAULT 1, channel_id TEXT, reward_type TEXT NOT NULL DEFAULT 'coins' CHECK(reward_type IN ('coins','xp')), reward_amount INTEGER NOT NULL DEFAULT 1, max_winners INTEGER NOT NULL DEFAULT 3, enabled INTEGER NOT NULL DEFAULT 1, created_by TEXT, created_at INTEGER NOT NULL DEFAULT (unixepoch()));" +
+  "CREATE TABLE IF NOT EXISTS task_progress (guild_id TEXT NOT NULL, task_id INTEGER NOT NULL, user_id TEXT NOT NULL, period_key TEXT NOT NULL, progress INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'progress' CHECK(status IN ('progress','pending','awarded','rejected')), proof TEXT NOT NULL DEFAULT '', completed_at INTEGER, awarded_at INTEGER, PRIMARY KEY(guild_id,task_id,user_id,period_key));" +
+  'CREATE INDEX IF NOT EXISTS idx_task_progress_claims ON task_progress(guild_id,status,completed_at);'
 );
 
 // Additive migration for databases created by older versions.
@@ -380,6 +385,136 @@ function inviteCount(guildId, inviterId) {
   return Number(row && row.count) || 0;
 }
 
+function localDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+function taskPeriodKey(period, date = new Date()) {
+  if (period === 'daily') return localDateKey(date);
+  const value = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = (value.getDay() + 6) % 7;
+  value.setDate(value.getDate() - day + 3);
+  const firstThursday = new Date(value.getFullYear(), 0, 4);
+  firstThursday.setDate(firstThursday.getDate() - ((firstThursday.getDay() + 6) % 7) + 3);
+  const week = 1 + Math.round((value - firstThursday) / 604800000);
+  return `${value.getFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+function createDailyQuestionRun(data) {
+  const result = db.prepare("INSERT OR IGNORE INTO daily_question_runs(guild_id,date_key,channel_id,question_key,question_text,answer_text,reward_coins,status,scheduled_at) VALUES(?,?,?,?,?,?,?,'pending',?)")
+    .run(data.guildId, data.dateKey, data.channelId, data.questionKey, data.question, data.answer, Math.max(0, Math.floor(Number(data.rewardCoins) || 0)), Math.floor(Number(data.scheduledAt) || Date.now() / 1000));
+  return result.changes ? Number(result.lastInsertRowid) : null;
+}
+function openDailyQuestion(guildId) {
+  return db.prepare("SELECT * FROM daily_question_runs WHERE guild_id=? AND status='open' ORDER BY id DESC LIMIT 1").get(guildId) || null;
+}
+function expireOldDailyQuestions(guildId, todayKey) {
+  return db.prepare("UPDATE daily_question_runs SET status='expired' WHERE guild_id=? AND status='open' AND date_key<?").run(guildId,todayKey).changes;
+}
+function dailyQuestionForDate(guildId, dateKey) {
+  return db.prepare('SELECT * FROM daily_question_runs WHERE guild_id=? AND date_key=?').get(guildId, dateKey) || null;
+}
+function setDailyQuestionSent(id, messageId) {
+  return db.prepare("UPDATE daily_question_runs SET status='open',message_id=?,sent_at=unixepoch() WHERE id=? AND status='pending'").run(messageId,id).changes > 0;
+}
+function failDailyQuestion(id) {
+  return db.prepare("UPDATE daily_question_runs SET status='failed' WHERE id=? AND status='pending'").run(id).changes > 0;
+}
+function retryDailyQuestionRun(id) {
+  return db.prepare("UPDATE daily_question_runs SET status='pending' WHERE id=? AND status='failed'").run(id).changes > 0;
+}
+function winDailyQuestion(id, userId) {
+  return db.prepare("UPDATE daily_question_runs SET status='won',winner_id=?,answered_at=unixepoch() WHERE id=? AND status='open' AND winner_id IS NULL").run(userId,id).changes > 0;
+}
+function listGuildTasks(guildId, enabledOnly = false) {
+  return db.prepare('SELECT * FROM guild_tasks WHERE guild_id=?' + (enabledOnly ? ' AND enabled=1' : '') + ' ORDER BY enabled DESC,id DESC').all(guildId);
+}
+function getGuildTask(guildId, taskId) {
+  return db.prepare('SELECT * FROM guild_tasks WHERE guild_id=? AND id=?').get(guildId,taskId) || null;
+}
+function createGuildTask(guildId, data, actorId) {
+  const result = db.prepare('INSERT INTO guild_tasks(guild_id,title,description,period,tracking_type,threshold,channel_id,reward_type,reward_amount,max_winners,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+    .run(guildId, String(data.title).slice(0,100), String(data.description || '').slice(0,500), data.period, data.trackingType,
+      Math.max(1,Math.floor(Number(data.threshold)||1)), data.channelId || null, data.rewardType,
+      Math.max(1,Math.floor(Number(data.rewardAmount)||1)), Math.max(1,Math.min(25,Math.floor(Number(data.maxWinners)||3))), actorId || null);
+  return Number(result.lastInsertRowid);
+}
+function updateGuildTask(guildId, taskId, patch) {
+  const old = getGuildTask(guildId,taskId);
+  if (!old) return false;
+  const next = { ...old, ...patch };
+  return db.prepare('UPDATE guild_tasks SET title=?,description=?,period=?,tracking_type=?,threshold=?,channel_id=?,reward_type=?,reward_amount=?,max_winners=?,enabled=? WHERE guild_id=? AND id=?')
+    .run(next.title,next.description,next.period,next.tracking_type,next.threshold,next.channel_id || null,next.reward_type,next.reward_amount,next.max_winners,next.enabled ? 1 : 0,guildId,taskId).changes > 0;
+}
+function deleteGuildTask(guildId, taskId) {
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM task_progress WHERE guild_id=? AND task_id=?').run(guildId,taskId);
+    return db.prepare('DELETE FROM guild_tasks WHERE guild_id=? AND id=?').run(guildId,taskId).changes > 0;
+  });
+  return tx();
+}
+function incrementTaskProgress(guildId, userId, trackingType, amount, channelId = null, now = new Date()) {
+  const tasks = db.prepare('SELECT * FROM guild_tasks WHERE guild_id=? AND enabled=1 AND tracking_type=?').all(guildId,trackingType);
+  const completed = [];
+  for (const task of tasks) {
+    if (task.tracking_type === 'messages' && !task.channel_id) continue;
+    if (task.channel_id && task.channel_id !== channelId) continue;
+    const periodKey = taskPeriodKey(task.period,now);
+    const current = db.prepare('SELECT * FROM task_progress WHERE guild_id=? AND task_id=? AND user_id=? AND period_key=?').get(guildId,task.id,userId,periodKey);
+    if (current && ['awarded','pending','rejected'].includes(current.status)) continue;
+    const next = (current ? Number(current.progress) : 0) + Math.max(0,Math.floor(Number(amount)||0));
+    db.prepare("INSERT INTO task_progress(guild_id,task_id,user_id,period_key,progress,status) VALUES(?,?,?,?,?,'progress') ON CONFLICT(guild_id,task_id,user_id,period_key) DO UPDATE SET progress=excluded.progress")
+      .run(guildId,task.id,userId,periodKey,next);
+    if (next >= Number(task.threshold)) {
+      const winners = db.prepare("SELECT COUNT(*) AS n FROM task_progress WHERE guild_id=? AND task_id=? AND period_key=? AND status='awarded'").get(guildId,task.id,periodKey).n;
+      if (winners < Number(task.max_winners)) {
+        db.prepare("UPDATE task_progress SET status='awarded',completed_at=unixepoch(),awarded_at=unixepoch() WHERE guild_id=? AND task_id=? AND user_id=? AND period_key=? AND status='progress'").run(guildId,task.id,userId,periodKey);
+        completed.push({ task, userId, rewardType: task.reward_type, rewardAmount: Number(task.reward_amount), periodKey });
+      } else {
+        db.prepare("UPDATE task_progress SET status='rejected',completed_at=unixepoch() WHERE guild_id=? AND task_id=? AND user_id=? AND period_key=? AND status='progress'").run(guildId,task.id,userId,periodKey);
+      }
+    }
+  }
+  return completed;
+}
+function getTaskProgress(guildId, taskId, userId, periodKey) {
+  return db.prepare('SELECT * FROM task_progress WHERE guild_id=? AND task_id=? AND user_id=? AND period_key=?').get(guildId,taskId,userId,periodKey) || null;
+}
+function claimManualTask(guildId, taskId, userId, proof = '', now = new Date()) {
+  const task = getGuildTask(guildId,taskId);
+  if (!task || !task.enabled || task.tracking_type !== 'manual') return { error: 'unavailable' };
+  const periodKey = taskPeriodKey(task.period,now);
+  const old = getTaskProgress(guildId,taskId,userId,periodKey);
+  if (old && ['pending','awarded'].includes(old.status)) return { error: 'already_claimed' };
+  db.prepare("INSERT INTO task_progress(guild_id,task_id,user_id,period_key,progress,status,proof,completed_at) VALUES(?,?,?, ?,?,'pending',?,unixepoch()) ON CONFLICT(guild_id,task_id,user_id,period_key) DO UPDATE SET progress=1,status='pending',proof=excluded.proof,completed_at=unixepoch()")
+    .run(guildId,taskId,userId,periodKey,1,String(proof).slice(0,500));
+  return { ok: true, task, periodKey };
+}
+function pendingTaskClaims(guildId, taskId = null) {
+  return db.prepare("SELECT p.*,t.title,t.description,t.reward_type,t.reward_amount,t.max_winners,t.period FROM task_progress p JOIN guild_tasks t ON t.id=p.task_id AND t.guild_id=p.guild_id WHERE p.guild_id=? AND p.status='pending'" + (taskId ? ' AND p.task_id=?' : '') + ' ORDER BY p.completed_at ASC,p.rowid ASC LIMIT 50').all(...(taskId ? [guildId,taskId] : [guildId]));
+}
+function reviewTaskClaim(guildId, taskId, userId, periodKey, approve) {
+  const tx = db.transaction(() => {
+    const row = db.prepare("SELECT p.rowid AS claim_rowid,p.*,t.title,t.channel_id,t.reward_type,t.reward_amount,t.max_winners FROM task_progress p JOIN guild_tasks t ON t.id=p.task_id AND t.guild_id=p.guild_id WHERE p.guild_id=? AND p.task_id=? AND p.user_id=? AND p.period_key=? AND p.status='pending'").get(guildId,taskId,userId,periodKey);
+    if (!row) return { error: 'not_found' };
+    if (approve) {
+      const earlier = db.prepare("SELECT 1 FROM task_progress WHERE guild_id=? AND task_id=? AND period_key=? AND status='pending' AND (completed_at<? OR (completed_at=? AND rowid<?)) LIMIT 1").get(guildId,taskId,periodKey,row.completed_at,row.completed_at,row.claim_rowid);
+      if (earlier) return { error: 'not_first' };
+      const winners = db.prepare("SELECT COUNT(*) AS n FROM task_progress WHERE guild_id=? AND task_id=? AND period_key=? AND status='awarded'").get(guildId,taskId,periodKey).n;
+      if (winners >= Number(row.max_winners)) return { error: 'full' };
+      db.prepare("UPDATE task_progress SET status='awarded',awarded_at=unixepoch() WHERE guild_id=? AND task_id=? AND user_id=? AND period_key=? AND status='pending'").run(guildId,taskId,userId,periodKey);
+      return { task: row, userId, rewardType: row.reward_type, rewardAmount: Number(row.reward_amount), approved: true };
+    }
+    db.prepare("UPDATE task_progress SET status='rejected' WHERE guild_id=? AND task_id=? AND user_id=? AND period_key=? AND status='pending'").run(guildId,taskId,userId,periodKey);
+    return { task: row, userId, approved: false };
+  });
+  return tx();
+}
+function setTaskMessageProgress(guildId, userId, channelId) {
+  return incrementTaskProgress(guildId,userId,'messages',1,channelId);
+}
+
 function pruneXpEvents() {
   return db.prepare('DELETE FROM xp_events WHERE created_at < unixepoch() - 45*86400').run().changes;
 }
@@ -423,5 +558,10 @@ module.exports = {
   markRoomWarned, closeRoom, extendRoom, renewRoom, setInteractionRoles, interactionRoles,
   logAdmin, pruneXpEvents,
   inviteSnapshots, saveInviteSnapshots, deleteInviteSnapshot, recordInviteJoin, inviteCount,
+  localDateKey, taskPeriodKey, createDailyQuestionRun, openDailyQuestion, dailyQuestionForDate,
+  setDailyQuestionSent, failDailyQuestion, retryDailyQuestionRun, winDailyQuestion, expireOldDailyQuestions,
+  listGuildTasks, getGuildTask, createGuildTask, updateGuildTask, deleteGuildTask,
+  incrementTaskProgress, getTaskProgress, claimManualTask, pendingTaskClaims, reviewTaskClaim,
+  setTaskMessageProgress,
   close: () => db.close()
 };

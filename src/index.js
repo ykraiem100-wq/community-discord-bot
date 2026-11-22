@@ -1,5 +1,6 @@
 'use strict';
 require('dotenv').config();
+if (!process.env.TZ) process.env.TZ = 'Asia/Amman';
 const {
   Client, GatewayIntentBits, Partials, EmbedBuilder, AttachmentBuilder,
   ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder, REST, Routes, MessageFlags, PermissionFlagsBits
@@ -11,6 +12,8 @@ const { shopPayload, handleShopInteraction, handleShopModal, processRoomExpirati
 const { handlePublicPanelInteraction, CYAN } = require('./panels');
 const { sendJoinWelcome, getJoinWelcomeConfig, parseButtonEmoji } = require('./join-welcome');
 const { sendMemberWelcomeCard } = require('./member-welcome');
+const { tickDailyQuestions, checkDailyQuestionAnswer } = require('./daily-questions');
+const { memberTasksPayload, handleTaskInteraction, handleTaskModal, grantTaskReward, publishTaskRewardMessage } = require('./tasks');
 const { getBoosterMultiplier, applyXpMultiplier } = require('./booster-xp');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
 
@@ -72,13 +75,15 @@ async function registerSlashCommands() {
 }
 function helpEmbed() {
   return new EmbedBuilder().setColor(CYAN).setTitle('DOS COMMUNITY • الأوامر').setDescription([
-    '/wallet أو .محفظتي — عرض المحفظة',
+    '/wallet أو .محفظتي أو r — عرض المحفظة',
     '/top أو اكتب TOP — المتصدرون',
     '/shop أو .المتجر — متجر DOS',
     '/color-selection — استكمال اختيار اللون برقم الطلب إن تعذّر فتح الرسائل الخاصة',
     '.متصدرين كتابي / صوتي / عملات — ترتيب مختصر',
     '.إحصائيات — إحصائيات السيرفر',
     '.دعواتي — عدد الأعضاء الذين انضموا من رابطك الشخصي',
+    '.مهامي — عرض تقدمك في مهام اليوم والأسبوع',
+    'r — اختصار سريع للمحفظة',
     '.رابط — إرسال رابط دعوة شخصي إلى الخاص',
     'للإدارة: /admin-panel — لوحة التحكم التفاعلية',
     'للإدارة: /add-coins و /add-xp و /reset-member (مع تأكيد لإعادة الضبط)',
@@ -167,6 +172,8 @@ async function awardAdminXp(guild, channel, user, kind, amount, actorId) {
     xpPerCoin: Number(database.getConfig(guild.id, 'xp_per_coin', '250'))
   });
   database.logAdmin(guild.id, actorId, 'member_add_xp', `target=${user.id};kind=${kind};amount=${amount};coins=${result.coinsEarned}`);
+  const taskCompletions = database.incrementTaskProgress(guild.id, user.id, 'xp', amount);
+  await applyTaskCompletions(guild, channel, taskCompletions);
   if (result.newTextLevel > result.oldTextLevel || result.newVoiceLevel > result.oldVoiceLevel) {
     const member = await guild.members.fetch(user.id).catch(() => null);
     if (kind === 'text' && member) await assignLevelRole(member, 'text', result.newTextLevel);
@@ -175,6 +182,19 @@ async function awardAdminXp(guild, channel, user, kind, amount, actorId) {
     await sendConfiguredLevelUpNotice(guild, channel, user, level);
   }
   return result;
+}
+
+async function applyTaskCompletions(guild, fallbackChannel, completions) {
+  for (const result of completions || []) {
+    try {
+      grantTaskReward(guild.id, result.userId, result.rewardType, result.rewardAmount);
+      const configuredChannel = database.getConfig(guild.id, 'tasks_announce_channel_id', '');
+      const channel = configuredChannel ? await guild.channels.fetch(configuredChannel).catch(() => null) : fallbackChannel || guild.systemChannel;
+      await publishTaskRewardMessage(channel, result.userId, result.task, result.rewardAmount, result.rewardType);
+    } catch (error) {
+      console.error('[TASKS] Reward delivery failed:', error);
+    }
+  }
 }
 
 async function awardVoice(guildId,userId) {
@@ -191,14 +211,19 @@ async function awardVoice(guildId,userId) {
   const result = database.addXp(guildId,userId,'voice',amount,{seconds:elapsedMinutes*60,
     awardXp:database.featureEnabled(guildId,'levels'), awardCoins:database.featureEnabled(guildId,'economy'),
     xpPerCoin:Number(database.getConfig(guildId,'xp_per_coin','250'))});
+  if (database.featureEnabled(guildId,'levels')) {
+    const completions = database.incrementTaskProgress(guildId,userId,'xp',amount);
+    if (guild) await applyTaskCompletions(guild, guild.systemChannel, completions);
+  }
   database.updateVoice(guildId,userId,session.started_at+elapsedMinutes*60000);
   if (database.featureEnabled(guildId,'levels') && result.newVoiceLevel > result.oldVoiceLevel) {
     await assignLevelRole(member,'voice',result.newVoiceLevel);
     if (member && guild) await sendConfiguredLevelUpNotice(guild, guild.systemChannel, member.user, result.newVoiceLevel);
   }
 }
-async function handleCommand(message) {
-  const args = message.content.slice(prefix.length).trim().split(/\s+/).filter(Boolean);
+async function handleCommand(message, rawCommandText = null) {
+  const commandSource = rawCommandText === null ? message.content.slice(prefix.length) : rawCommandText;
+  const args = commandSource.trim().split(/\s+/).filter(Boolean);
   const command = (args.shift() || '').toLowerCase();
   const guildId = message.guild.id;
   const userId = message.author.id;
@@ -208,6 +233,9 @@ async function handleCommand(message) {
       if (!database.featureEnabled(guildId,'economy')) return message.reply('المحفظة متوقفة مؤقتاً.');
       const user = message.mentions.users.first() || message.author;
       return message.reply(await walletPayload(message.guild,user));
+    }
+    if (command === 'مهامي') {
+      return message.reply(memberTasksPayload(guildId, userId));
     }
     if (command === 'دعواتي') {
       const count = database.inviteCount(guildId, userId);
@@ -396,7 +424,21 @@ async function trackInviteJoin(member) {
       .sort((a, b) => (b.currentUses - b.previousUses) - (a.currentUses - a.previousUses))[0];
     const inviterId = used && ((used.invite.inviter && used.invite.inviter.id) || (previous.get(used.invite.code) && previous.get(used.invite.code).inviter_id));
     if (used && inviterId) {
-      database.recordInviteJoin(guild.id, member.id, inviterId, used.invite.code);
+      const recorded = database.recordInviteJoin(guild.id, member.id, inviterId, used.invite.code);
+      if (recorded && inviterId !== member.id) {
+        const amount = Math.max(0, Math.min(1000000, Math.floor(Number(database.getConfig(guild.id,'invite_reward_amount','0')) || 0)));
+        const type = database.getConfig(guild.id,'invite_reward_type','coins');
+        if (amount > 0 && ['coins','xp'].includes(type)) {
+          if (type === 'xp') {
+            database.addXp(guild.id, inviterId, 'text', amount, { awardXp: true, awardCoins: true, xpPerCoin: Number(database.getConfig(guild.id,'xp_per_coin','250')) });
+            const taskCompletions = database.incrementTaskProgress(guild.id, inviterId, 'xp', amount);
+            await applyTaskCompletions(guild, guild.systemChannel, taskCompletions);
+          } else database.addCoins(guild.id, inviterId, amount);
+          const inviter = await guild.members.fetch(inviterId).catch(() => null);
+          if (inviter && guild.systemChannel) await guild.systemChannel.send({ content: `🎟️ ${inviter} حصل على مكافأة دعوة جديدة: **${amount.toLocaleString('en-US')} ${type === 'xp' ? 'XP' : 'DOS Coin'}**.`, allowedMentions: { users: [inviterId] } }).catch(() => {});
+          database.logAdmin(guild.id, inviterId, 'invite_reward_paid', `joined=${member.id};type=${type};amount=${amount}`);
+        }
+      }
       console.log(`[INVITES] ${member.user.tag} joined via ${used.invite.code} (inviter ${inviterId}).`);
     } else {
       console.log(`[INVITES] Invite source for ${member.user.tag} could not be identified.`);
@@ -415,6 +457,8 @@ client.once('clientReady',async () => {
   console.log('[DISCORD] Connected to '+client.guilds.cache.size+' server(s)');
   for (const guild of client.guilds.cache.values()) await refreshInviteSnapshots(guild);
   await registerSlashCommands().catch((error) => console.error('[SLASH] Registration failed:',error.message));
+  await tickDailyQuestions(client).catch((error) => console.error('[DAILY QUESTION] Initial scheduler failed:', error));
+  setInterval(() => tickDailyQuestions(client).catch((error) => console.error('[DAILY QUESTION] Scheduler failed:', error)), 60_000).unref();
   for (const session of database.allVoice()) database.stopVoice(session.guild_id,session.user_id);
   for (const guild of client.guilds.cache.values()) for (const state of guild.voiceStates.cache.values()) {
     if (state.channelId && state.member && !state.member.user.bot && !state.selfDeaf && !state.serverDeaf && !state.selfMute && !state.serverMute) database.startVoice(guild.id,state.id,Date.now());
@@ -449,6 +493,14 @@ client.on('guildMemberAdd', (member) => {
 client.on('messageCreate',async (message) => {
   if (!message.guild || message.author.bot) return;
   const trimmed = message.content.trim();
+  try { await checkDailyQuestionAnswer(message); }
+  catch (error) { console.error('[DAILY QUESTION] Answer check failed:', error); }
+  try {
+    const messageTaskCompletions = database.setTaskMessageProgress(message.guild.id, message.author.id, message.channel.id);
+    await applyTaskCompletions(message.guild, message.channel, messageTaskCompletions);
+  } catch (error) { console.error('[TASKS] Message progress failed:', error); }
+  // Bare 'r' is a dedicated wallet shortcut; it intentionally has no prefix.
+  if (/^r(?:\s+<@!?\d+>)?$/i.test(trimmed)) return handleCommand(message, trimmed);
   if (/^top$/i.test(trimmed)) {
     if (!database.featureEnabled(message.guild.id,'top')) return;
     return message.reply(await topPayload(message.guild,'all','all'));
@@ -462,6 +514,10 @@ client.on('messageCreate',async (message) => {
     const awardXp = database.featureEnabled(guildId,'levels');
     const awardCoins = database.featureEnabled(guildId,'economy');
     const result = database.addXp(guildId,message.author.id,'text',rate,{message:true,awardXp,awardCoins,xpPerCoin:Number(database.getConfig(guildId,'xp_per_coin','250'))});
+    if (awardXp) {
+      const completions = database.incrementTaskProgress(guildId,message.author.id,'xp',rate);
+      await applyTaskCompletions(message.guild,message.channel,completions);
+    }
     if (awardXp && result.newTextLevel > result.oldTextLevel) {
       await assignLevelRole(message.member,'text',result.newTextLevel);
       await sendConfiguredLevelUpNotice(message.guild, message.channel, message.author, result.newTextLevel);
@@ -489,10 +545,16 @@ client.on('interactionCreate',async (interaction) => {
     if (interaction.isModalSubmit()) {
       const adminHandled = await handleAdminModal(interaction);
       if (adminHandled !== false) return adminHandled;
+      const taskHandled = await handleTaskModal(interaction);
+      if (taskHandled !== false) return taskHandled;
       const shopHandled = await handleShopModal(interaction, client);
       if (shopHandled !== false) return shopHandled;
     }
     if (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isChannelSelectMenu() || interaction.isRoleSelectMenu()) {
+      if (interaction.customId.startsWith('tasks:')) {
+        const taskHandled = await handleTaskInteraction(interaction);
+        if (taskHandled !== false) return taskHandled;
+      }
       if (interaction.isButton() && interaction.customId === 'joinwelcome:wave') {
         await interaction.deferUpdate();
         try {
