@@ -20,11 +20,18 @@ const CONTENT_KEYS = [
   ['social', 'منصات التواصل'], ['apply', 'التقديم'], ['news', 'آخر التحديثات']
 ];
 
-function isAdmin(member, userId, permissionBits) {
+function isAdmin(member, userId, permissionBits, guildId) {
   const owner = (process.env.OWNER_ID || '').trim();
   const perms = permissionBits || (member && member.permissions);
   const administrator = Boolean(perms && typeof perms.has === 'function' && perms.has(PermissionsBitField.Flags.Administrator));
-  return Boolean(administrator || (owner && owner === userId));
+  const resolvedGuildId = guildId || (member && (member.guildId || (member.guild && member.guild.id))) || '';
+  const configuredRole = resolvedGuildId ? database.getConfig(resolvedGuildId, 'admin_role_id', '') : '';
+  const roleCache = member && member.roles && member.roles.cache;
+  const roleIds = roleCache && typeof roleCache.has === 'function'
+    ? null
+    : (member && Array.isArray(member.roles) ? member.roles : []);
+  const hasConfiguredRole = Boolean(configuredRole && (roleCache ? roleCache.has(configuredRole) : roleIds.includes(configuredRole)));
+  return Boolean(administrator || hasConfiguredRole || (owner && owner === userId));
 }
 function adminEmbed(title, description) {
   return new EmbedBuilder().setColor(CYAN).setTitle(title).setDescription(description).setFooter({ text: 'DOS CONTROL PANEL • الإدارة فقط' });
@@ -58,7 +65,8 @@ async function homePayload(guildOrId) {
       { label: 'أوامر إدارة الأعضاء', value: 'member_tools', description: 'إضافة عملات وXP وإعادة ضبط عضو مع تأكيد', emoji: '🛠️' },
       { label: 'رتب التفاعل', value: 'roles', description: 'تحديد رتب الإشعارات', emoji: '🔔' },
       { label: 'رتب المستويات', value: 'level_roles', description: 'ربط رتب بمستويات الكتابة والصوت', emoji: '🏅' },
-      { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' }
+      { label: 'طلبات المتجر', value: 'sales', description: 'مراجعة طلبات الدفع والتسليم', emoji: '🧾' },
+      { label: 'صلاحيات الإدارة وروم اللوحة', value: 'access', description: 'تحديد رتبة الإدارة والقناة التي تظهر فيها لوحة التحكم', emoji: '🔐' }
     );
   const stats = database.stats(guildId) || {};
   stats.serverName = guild ? guild.name : 'DOS COMMUNITY';
@@ -114,12 +122,38 @@ function shopSettingsPayload(guildId) {
   const settings = database.settings(guildId);
   const channelText = settings.shop_channel_id ? `<#${settings.shop_channel_id}>` : 'غير محددة';
   const categoryText = settings.shop_category_id ? `<#${settings.shop_category_id}>` : 'غير محدد (ستُنشأ الغرف دون تصنيف)';
-  return withSectionImage({ embeds: [adminEmbed('⚙️ إعداد قنوات المتجر', `**قناة عرض المتجر:** ${channelText}\n**تصنيف الغرف الخاصة:** ${categoryText}\n\nاختر القناة والتصنيف؛ تبقى هذه الصفحة مفتوحة حتى تنتهي من الإعداد.`)], components: [
+  const subtitle = database.getConfig(guildId, 'shop_subtitle', 'COLORS • CUSTOM ROLES • ITEMS');
+  return withSectionImage({ embeds: [adminEmbed('⚙️ إعداد قنوات المتجر', `**قناة عرض المتجر:** ${channelText}\n**تصنيف الغرف الخاصة:** ${categoryText}\n**النص الصغير تحت DOS SHOP:** ${subtitle || 'فارغ'}\n\nاختر القناة والتصنيف، أو عدّل الكتابة داخل صورة المتجر؛ تبقى هذه الصفحة مفتوحة حتى تنتهي من الإعداد.`)], components: [
     new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:set-shop-channel').setPlaceholder('اختر قناة عرض المتجر').setChannelTypes(ChannelType.GuildText)),
     new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:set-room-category').setPlaceholder('اختر تصنيف الغرف الخاصة').setChannelTypes(ChannelType.GuildCategory)),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:subtitle').setLabel('تعديل كتابة صورة المتجر').setEmoji('🖼️').setStyle(ButtonStyle.Primary)),
     new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:back').setLabel('رجوع للمتجر').setStyle(ButtonStyle.Secondary))
   ] }, 'إعداد قنوات المتجر', 'اختر قناة عرض المتجر وتصنيف الغرف الخاصة', 'SHOP');
 }
+function adminAccessPayload(guildId, notice = '') {
+  const roleId = database.getConfig(guildId, 'admin_role_id', '');
+  const channelId = database.getConfig(guildId, 'admin_panel_channel_id', '');
+  const description = [
+    `**رتبة الإدارة:** ${roleId ? `<@&${roleId}>` : 'غير محددة — سيبقى Administrator ومالك البوت مخولين'}`,
+    `**روم لوحة التحكم:** ${channelId ? `<#${channelId}>` : 'غير محدد — يمكن فتح اللوحة من أي روم'}`,
+    '',
+    'أي عضو يحمل رتبة الإدارة المحددة يستطيع استخدام `/admin-panel` وإدارة الإعدادات. تظل صلاحية Administrator ومالك البوت متاحة دائماً.',
+    'بعد تحديد روم اللوحة، يجب استخدام `/admin-panel` من ذلك الروم، وتظهر اللوحة علناً لجميع من يستطيع مشاهدة القناة. الأزرار نفسها تبقى محمية للإدارة.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  const roleMenu = new RoleSelectMenuBuilder().setCustomId('admin:access:role').setPlaceholder('اختر رتبة الإدارة').setMinValues(1).setMaxValues(1);
+  const channelMenu = new ChannelSelectMenuBuilder().setCustomId('admin:access:channel').setPlaceholder('اختر روم لوحة التحكم').setChannelTypes(ChannelType.GuildText);
+  return withSectionImage({ embeds: [adminEmbed('🔐 صلاحيات الإدارة وروم لوحة التحكم', description)], components: [
+    new ActionRowBuilder().addComponents(roleMenu),
+    new ActionRowBuilder().addComponents(channelMenu),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:access:clear-role').setLabel('إلغاء رتبة الإدارة').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:access:clear-channel').setLabel('إلغاء تحديد الروم').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ] }, 'صلاحيات الإدارة', 'اختر رتبة الإدارة وروم لوحة التحكم', 'ACCESS');
+}
+
 function contentAdminPayload(guildId, notice = '') {
   const editMenu = new StringSelectMenuBuilder().setCustomId('admin:content:choose').setPlaceholder('اختر رسالة لتعديلها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
@@ -309,7 +343,7 @@ function parseProductFields(interaction) {
 async function handleAdminInteraction(interaction, client) {
   const parts = interaction.customId.split(':');
   if (parts[0] !== 'admin') return false;
-  if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions)) return interaction.reply({ content: 'هذه اللوحة للإدارة فقط.', flags: MessageFlags.Ephemeral });
+  if (!isAdmin(interaction.member, interaction.user.id, interaction.memberPermissions, interaction.guildId)) return interaction.reply({ content: 'هذه اللوحة للإدارة فقط.', flags: MessageFlags.Ephemeral });
 
   if (parts[1] === 'home') return interaction.update(await homePayload(interaction.guild));
   if (parts[1] === 'nav' && interaction.isStringSelectMenu()) {
@@ -321,6 +355,7 @@ async function handleAdminInteraction(interaction, client) {
       : section === 'features' ? featuresPayload(interaction.guildId)
       : section === 'economy' ? economyPayload(interaction.guildId)
       : section === 'member_tools' ? memberToolsPayload()
+      : section === 'access' ? adminAccessPayload(interaction.guildId)
       : section === 'roles' ? rolesPayload(interaction.guildId)
       : section === 'level_roles' ? levelRolesPayload(interaction.guildId) : salesPayload(interaction.guildId);
     return interaction.update(payload);
@@ -427,6 +462,38 @@ async function handleAdminInteraction(interaction, client) {
     const message = await publishShop(interaction.guild,channel);
     database.logAdmin(interaction.guildId,interaction.user.id,'shop_publish',`channel=${channel.id};message=${message.id}`);
     return interaction.update({ content: `✅ تم نشر/تحديث المتجر في ${channel}.`, embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:shop:back').setLabel('رجوع للمتجر').setStyle(ButtonStyle.Secondary))] });
+  }
+  if (parts[1] === 'shop' && parts[2] === 'subtitle') {
+    const current = database.getConfig(interaction.guildId, 'shop_subtitle', 'COLORS • CUSTOM ROLES • ITEMS');
+    const subtitleInput = new TextInputBuilder().setCustomId('subtitle').setLabel('النص الصغير أسفل DOS SHOP').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(90).setPlaceholder('COLORS • CUSTOM ROLES • ITEMS');
+    if (String(current || '').trim()) subtitleInput.setValue(String(current).slice(0, 90));
+    const modal = new ModalBuilder().setCustomId('admin:shop:subtitle-save').setTitle('تعديل كتابة صورة DOS SHOP')
+      .addComponents(new ActionRowBuilder().addComponents(subtitleInput));
+    return interaction.showModal(modal);
+  }
+  if (parts[1] === 'access' && parts[2] === 'role' && interaction.isRoleSelectMenu()) {
+    const role = interaction.roles.first();
+    if (!role || role.id === interaction.guildId || role.managed) return interaction.reply({ content: 'اختر رتبة عادية غير مُدارة من Discord.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'admin_role_id', role.id, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'admin_role_set', role.id);
+    return interaction.update(adminAccessPayload(interaction.guildId, `تم تعيين ${role} كرتبة إدارة.`));
+  }
+  if (parts[1] === 'access' && parts[2] === 'channel' && interaction.isChannelSelectMenu()) {
+    const channel = await interaction.guild.channels.fetch(interaction.values[0]).catch(() => null);
+    if (!channel || channel.type !== ChannelType.GuildText) return interaction.reply({ content: 'اختر روم كتابي عادي للوحة التحكم.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'admin_panel_channel_id', channel.id, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'admin_panel_channel_set', channel.id);
+    return interaction.update(adminAccessPayload(interaction.guildId, `تم تحديد ${channel} رومًا للوحة التحكم.`));
+  }
+  if (parts[1] === 'access' && parts[2] === 'clear-role') {
+    database.setConfig(interaction.guildId, 'admin_role_id', '', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'admin_role_clear', '');
+    return interaction.update(adminAccessPayload(interaction.guildId, 'تم إلغاء رتبة الإدارة الإضافية.'));
+  }
+  if (parts[1] === 'access' && parts[2] === 'clear-channel') {
+    database.setConfig(interaction.guildId, 'admin_panel_channel_id', '', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'admin_panel_channel_clear', '');
+    return interaction.update(adminAccessPayload(interaction.guildId, 'يمكن الآن فتح اللوحة من أي روم.'));
   }
   if (parts[1] === 'shop' && parts[2] === 'settings') return interaction.update(shopSettingsPayload(interaction.guildId));
   if (parts[1] === 'clear-level-channel') {
@@ -568,7 +635,14 @@ async function handleAdminInteraction(interaction, client) {
 async function handleAdminModal(interaction) {
   const parts = interaction.customId.split(':');
   if (parts[0] !== 'admin') return false;
-  if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content: 'هذه العملية للإدارة فقط.', flags: MessageFlags.Ephemeral });
+  if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions,interaction.guildId)) return interaction.reply({ content: 'هذه العملية للإدارة فقط.', flags: MessageFlags.Ephemeral });
+  if (parts[1] === 'shop' && parts[2] === 'subtitle-save') {
+    const subtitle = interaction.fields.getTextInputValue('subtitle').trim().slice(0, 90);
+    database.setConfig(interaction.guildId, 'shop_subtitle', subtitle, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'shop_subtitle_update', subtitle);
+    await refreshPublishedShop(interaction.guild).catch((error) => console.error('[ADMIN] Store artwork refresh failed:', error.message));
+    return interaction.reply({ content: '✅ تم حفظ النص الصغير في صورة DOS SHOP وتحديث المتجر المنشور إذا كان موجوداً.', flags: MessageFlags.Ephemeral });
+  }
   if (parts[1] === 'join-welcome' && parts[2] === 'save') {
     const template = interaction.fields.getTextInputValue('template').trim().replace(/^\s*-#\s*/, '');
     const emoji = interaction.fields.getTextInputValue('emoji').trim();
@@ -655,4 +729,4 @@ async function handleAdminModal(interaction) {
   return false;
 }
 
-module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, contentAdminPayload, joinWelcomePayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };
+module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, adminAccessPayload, contentAdminPayload, joinWelcomePayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };

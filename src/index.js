@@ -309,11 +309,17 @@ async function handleSlashCommand(interaction) {
   if (!interaction.guildId || !interaction.guild) return interaction.reply({ content: 'استخدم هذا الأمر داخل سيرفر DOS COMMUNITY.', flags: MessageFlags.Ephemeral });
   const guildId = interaction.guildId;
   if (interaction.commandName === 'admin-panel') {
-    if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
-    return interaction.reply({ ...await homePayload(interaction.guild),flags:MessageFlags.Ephemeral });
+    if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions,guildId)) return interaction.reply({ content:'هذه اللوحة للإدارة فقط.',flags:MessageFlags.Ephemeral });
+    const dashboardChannelId = database.getConfig(guildId, 'admin_panel_channel_id', '');
+    if (dashboardChannelId && interaction.channelId !== dashboardChannelId) {
+      return interaction.reply({ content: `افتح لوحة التحكم من الروم المحدد: <#${dashboardChannelId}>.`, flags: MessageFlags.Ephemeral });
+    }
+    // Public dashboard: everyone in the configured room can view it; all controls
+    // are still checked by isAdmin() before any action is performed.
+    return interaction.reply(await homePayload(interaction.guild));
   }
   if (['add-coins','add-xp','reset-member'].includes(interaction.commandName)) {
-    if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions)) {
+    if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions,guildId)) {
       return interaction.reply({ content: 'هذه الأوامر للإدارة فقط.', flags: MessageFlags.Ephemeral });
     }
     const target = interaction.options.getUser('member',true);

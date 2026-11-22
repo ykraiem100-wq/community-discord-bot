@@ -62,6 +62,11 @@ addColumn('guild_settings', 'shop_category_id', 'TEXT');
 addColumn('guild_settings', 'shop_message_id', 'TEXT');
 addColumn('guild_settings', 'level_up_channel_id', 'TEXT');
 addColumn('shop_products', 'cash_currency', "TEXT NOT NULL DEFAULT 'JOD'");
+addColumn('custom_color_roles', 'expires_at', 'INTEGER');
+addColumn('private_rooms', 'panel_message_id', 'TEXT');
+addColumn('private_rooms', 'voice_locked', 'INTEGER NOT NULL DEFAULT 0');
+// Existing custom-color roles receive a fresh 30-day grace period on first upgrade.
+db.exec('UPDATE custom_color_roles SET expires_at=unixepoch()+2592000 WHERE expires_at IS NULL');
 const memberColumns = columns('members');
 if (memberColumns.has('total_xp') && memberColumns.has('text_xp') && memberColumns.has('voice_xp')) {
   db.exec('UPDATE members SET text_xp = total_xp WHERE text_xp = 0 AND voice_xp = 0 AND total_xp > 0');
@@ -290,8 +295,15 @@ function updateProductPurchase(guildId, purchaseId, status, metadata, reviewerId
 function pendingProductPurchases(guildId) {
   return db.prepare("SELECT * FROM product_purchases WHERE guild_id=? AND status IN ('awaiting_payment','pending_fulfillment') ORDER BY id ASC LIMIT 30").all(guildId);
 }
-function setCustomColorRole(guildId, userId, roleId) {
-  db.prepare('INSERT INTO custom_color_roles(guild_id,user_id,role_id) VALUES(?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET role_id=excluded.role_id,updated_at=unixepoch()').run(guildId, userId, roleId);
+function setCustomColorRole(guildId, userId, roleId, expiresAt) {
+  const expiry = Number.isSafeInteger(Number(expiresAt)) ? Number(expiresAt) : Math.floor(Date.now() / 1000) + 30 * 86400;
+  db.prepare('INSERT INTO custom_color_roles(guild_id,user_id,role_id,expires_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET role_id=excluded.role_id,expires_at=excluded.expires_at,updated_at=unixepoch()').run(guildId, userId, roleId, expiry);
+}
+function expiredCustomColorRoles(now = Math.floor(Date.now() / 1000)) {
+  return db.prepare('SELECT guild_id,user_id,role_id,expires_at FROM custom_color_roles WHERE expires_at IS NOT NULL AND expires_at<=?').all(now);
+}
+function deleteCustomColorRole(guildId, userId) {
+  return db.prepare('DELETE FROM custom_color_roles WHERE guild_id=? AND user_id=?').run(guildId,userId).changes > 0;
 }
 function getCustomColorRole(guildId, userId) {
   const row = db.prepare('SELECT role_id FROM custom_color_roles WHERE guild_id=? AND user_id=?').get(guildId, userId);
@@ -304,6 +316,15 @@ function createRoomRecord(guildId, userId, channelId, channelType, productId, ex
 }
 function activeRooms(guildId) {
   return db.prepare('SELECT * FROM private_rooms WHERE guild_id=? AND active=1').all(guildId);
+}
+function getRoomByChannel(guildId, channelId) {
+  return db.prepare('SELECT * FROM private_rooms WHERE guild_id=? AND channel_id=? AND active=1').get(guildId,channelId) || null;
+}
+function setRoomPanelMessage(roomId, messageId) {
+  return db.prepare('UPDATE private_rooms SET panel_message_id=? WHERE id=? AND active=1').run(messageId,roomId).changes > 0;
+}
+function setRoomLocked(roomId, locked) {
+  return db.prepare('UPDATE private_rooms SET voice_locked=? WHERE id=? AND active=1').run(locked ? 1 : 0,roomId).changes > 0;
 }
 function getRoom(guildId, id, userId) {
   return db.prepare('SELECT * FROM private_rooms WHERE guild_id=? AND id=?' + (userId ? ' AND user_id=?' : '')).get(...(userId ? [guildId,id,userId] : [guildId,id])) || null;
@@ -397,7 +418,8 @@ module.exports = {
   setConfig, getConfig, featureEnabled, setFeature, setContent, getContent, savePanel, saveShopMessage,
   createProduct, ensureDefaultColorProduct, updateProduct, setProductActive, removeProduct, products,
   purchaseProduct, getProductPurchase, updateProductPurchase, pendingProductPurchases, refundProductPurchase,
-  setCustomColorRole, getCustomColorRole, createRoomRecord, activeRooms, getRoom,
+  setCustomColorRole, getCustomColorRole, expiredCustomColorRoles, deleteCustomColorRole,
+  createRoomRecord, activeRooms, getRoom, getRoomByChannel, setRoomPanelMessage, setRoomLocked,
   markRoomWarned, closeRoom, extendRoom, renewRoom, setInteractionRoles, interactionRoles,
   logAdmin, pruneXpEvents,
   inviteSnapshots, saveInviteSnapshots, deleteInviteSnapshot, recordInviteJoin, inviteCount,

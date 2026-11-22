@@ -354,7 +354,7 @@ async function renderMainPanel() {
 
 // Full-width store artwork only: no extra card/frame or title graphic. A large DOS
 // wordmark is placed in the crest medallion and the source illustration fills the image.
-async function renderShopHeader() {
+async function renderShopHeader(guild = null, subtitle = 'COLORS • CUSTOM ROLES • ITEMS') {
   const source = await loadSafeImage(path.join(TEMPLATE_DIR, 'shop-crest-bg.png'));
   if (!source) throw new Error('Missing DOS shop crest background.');
   const logo = await loadTemplate('dos-community-logo.png');
@@ -363,13 +363,27 @@ async function renderShopHeader() {
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   ctx.drawImage(source, 0, 0, width, height);
-  // Place the exact DOS COMMUNITY logo inside the empty cyan/silver crest.
-  // These coordinates align with the 1672x941 artwork's inner circular medallion.
+  // Place the exact DOS logo in the silver/cyan crest on the left.
   drawBrandLogo(ctx, logo, width * 0.254, height * 0.397, height * 0.466, '#63DDF5');
+
+  // Typography sits in the intentionally empty right side of the artwork.
+  drawText(ctx, 'DOS SHOP', width * 0.735, height * 0.405, 104, '#F0FAFF', 900, 'center', width * 0.46);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(99,221,245,0.82)';
+  ctx.lineWidth = 4;
+  ctx.shadowColor = '#36D9FF';
+  ctx.shadowBlur = 14;
+  ctx.beginPath();
+  ctx.moveTo(width * 0.56, height * 0.49);
+  ctx.lineTo(width * 0.91, height * 0.49);
+  ctx.stroke();
+  ctx.restore();
+  const smallText = String(subtitle || '').trim().slice(0, 90);
+  if (smallText) drawText(ctx, smallText, width * 0.735, height * 0.56, 31, '#BFEFFA', 700, 'center', width * 0.48);
   return canvas.toBuffer('image/png');
 }
 
-// Full-spectrum HSV wheel: a visual reference paired with a hex-input modal for any sRGB color.
+// Full-spectrum HSV wheel: a visual reference paired with named color choices in the Discord menu.
 function renderColorWheel() {
   const size = 430, center = size / 2, radius = 185;
   const canvas = createCanvas(size, size);
@@ -401,7 +415,7 @@ function renderColorWheel() {
   ctx.strokeStyle = '#63DDF5'; ctx.lineWidth = 5; ctx.stroke();
   ctx.beginPath(); ctx.arc(center, center, 28, 0, Math.PI * 2);
   ctx.fillStyle = '#34363B'; ctx.fill(); ctx.strokeStyle = '#F2F2F4'; ctx.lineWidth = 2; ctx.stroke();
-  drawText(ctx, 'HEX', center, center, 13, C.white, 900, 'center', 32);
+  drawText(ctx, 'DOS', center, center, 13, C.white, 900, 'center', 32);
   return canvas.toBuffer('image/png');
 }
 
