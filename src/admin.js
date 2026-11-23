@@ -36,7 +36,8 @@ const COMMAND_CONTROLS = [
   ['admin_panel', 'لوحة الإدارة', '/admin-panel'],
   ['dm_notifications', 'اشتراك إعلانات الخاص', '/dm-notifications'],
   ['dm_announcement', 'الإعلان الخاص الجماعي', '/dm-announcement'],
-  ['dm_announcement_status', 'حالة الإعلان الخاص', '/dm-announcement-status']
+  ['dm_announcement_status', 'حالة الإعلان الخاص', '/dm-announcement-status'],
+  ['genie', 'لعبة المارد', '.المارد']
 ];
 const CONTENT_KEYS = [
   ['main', 'اللوحة الرئيسية'], ['rules', 'قوانين السيرفر'], ['info', 'معلومات السيرفر'],
@@ -84,6 +85,7 @@ async function homePayload(guildOrId) {
       { label: '❓ سؤال اليوم العشوائي', value: 'daily_questions', description: '110+ سؤالاً، توقيت عشوائي يومياً، وجائزة أول إجابة' },
       { label: '🎯 المهام اليومية والأسبوعية', value: 'tasks', description: 'إنشاء مهام وتحديد الجوائز وعدد الفائزين ومراجعة الإثباتات' },
       { label: '🎟️ مكافآت الدعوات', value: 'invite_rewards', description: 'حدد XP أو عملات لكل عضو يدخل من دعوة مسجلة' },
+      { label: '🧞 لعبة المارد', value: 'genie', description: 'تحديد روم اللعبة والجائزة وعدد الأسئلة والتخمينات ووقت الانتظار' },
       { label: '📨 إعلانات الخاص للمشتركين', value: 'broadcast', description: 'إحصائيات الاشتراك وحالة الحملات الخاصة' },
       { label: '📈 العملات والمستويات', value: 'economy', description: 'تعديل XP والتحويل ومتطلبات المستويات وقناة الإشعارات' },
       { label: '🛍️ إدارة المتجر', value: 'shop', description: 'إضافة المنتجات وتعديلها والطلبات' },
@@ -288,6 +290,47 @@ function boosterXpPayload(guildId, notice = '') {
       new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
     )
   ] }, 'مكافأة بوست السيرفر', 'زيادة خبرة الأعضاء الداعمين للسيرفر', 'BOOST');
+}
+
+function genieAdminPayload(guildId, notice = '') {
+  const enabled = database.getConfig(guildId, 'genie_enabled', '0') === '1';
+  const channelId = database.getConfig(guildId, 'genie_channel_id', '');
+  const rewardEnabled = database.getConfig(guildId, 'genie_reward_enabled', '1') === '1';
+  const reward = Number(database.getConfig(guildId, 'genie_reward_coins', '25')) || 0;
+  const maxQuestions = Number(database.getConfig(guildId, 'genie_max_questions', '15')) || 15;
+  const maxGuesses = Number(database.getConfig(guildId, 'genie_max_guesses', '3')) || 3;
+  const cooldown = Number(database.getConfig(guildId, 'genie_cooldown_seconds', '60')) || 0;
+  const timeout = Number(database.getConfig(guildId, 'genie_session_timeout_minutes', '30')) || 0;
+  const top = database.getGenieLeaderboard(guildId, 5);
+  const lines = top.length ? top.map((row, index) => `${index + 1}. <@${row.user_id}> — **${row.wins}** فوز / ${row.total_games} لعبة`).join('\n') : 'لا توجد نتائج حتى الآن.';
+  const description = [
+    `**حالة اللعبة:** ${enabled ? '🟢 مفعّلة' : '🔴 متوقفة'}`,
+    `**الروم المحدد:** ${channelId ? `<#${channelId}>` : 'لم يتم تحديد روم بعد'}`,
+    `**الجائزة:** ${rewardEnabled ? `${reward.toLocaleString('en-US')} DOS Coin عند التخمين الصحيح` : 'بدون جائزة'}`,
+    `**حد الأسئلة:** ${maxQuestions} • **التخمينات:** ${maxGuesses}`,
+    `**وقت الانتظار بين الألعاب:** ${cooldown ? `${cooldown} ثانية` : 'بدون انتظار'}`,
+    `**انتهاء الجلسة المهجورة:** ${timeout ? `${timeout} دقيقة` : 'لا تنتهي تلقائياً'}`,
+    '',
+    '**أفضل اللاعبين:**', lines,
+    '',
+    'الأمر: `.المارد` — كل لاعب يلعب في الروم المحدد فقط. اللعبة مستقلة عن XP والعملات المعتادة؛ الجائزة اختيارية ويمكن إلغاؤها تماماً.',
+    'تحتوي النسخة على بنك شخصيات محلي قابل للتوسعة، ولا تعتمد على خدمة Akinator خارجية.',
+    ...(notice ? ['', `✅ ${notice}`] : [])
+  ].join('\n');
+  return withSectionImage({ embeds: [adminEmbed('🧞 إعدادات لعبة المارد', description)], components: [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:genie:toggle').setLabel(enabled ? 'إيقاف اللعبة' : 'تفعيل اللعبة').setEmoji(enabled ? '⏸️' : '▶️').setStyle(enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin:genie:reward-toggle').setLabel(rewardEnabled ? 'إلغاء الجائزة' : 'تفعيل الجائزة').setEmoji('💎').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:genie:stats').setLabel('تحديث الإحصائيات').setEmoji('📊').setStyle(ButtonStyle.Primary)
+    ),
+    new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId('admin:genie:channel').setPlaceholder('اختر روم لعبة المارد').setChannelTypes(ChannelType.GuildText)),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:genie:clear-channel').setLabel('إلغاء الروم').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:genie:reward-edit').setLabel('تعديل قيمة الجائزة').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:genie:limits-edit').setLabel('إعدادات الأسئلة والانتظار').setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
+  ] }, 'لعبة المارد', 'تحديد الروم والجائزة وطول اللعبة وفترة الانتظار', 'GENIE');
 }
 
 function featuresPayload(guildId) {
@@ -613,6 +656,7 @@ async function handleAdminInteraction(interaction, client) {
       : section === 'daily_questions' ? dailyQuestionAdminPayload(interaction.guildId)
       : section === 'tasks' ? tasksAdminPayload(interaction.guildId)
       : section === 'invite_rewards' ? inviteRewardsPayload(interaction.guildId)
+      : section === 'genie' ? genieAdminPayload(interaction.guildId)
       : section === 'broadcast' ? broadcastAdminPayload(interaction.guildId)
       : section === 'commands' ? commandControlsPayload(interaction.guildId)
       : section === 'features' ? featuresPayload(interaction.guildId)
@@ -708,6 +752,61 @@ async function handleAdminInteraction(interaction, client) {
     database.setConfig(interaction.guildId, 'booster_role_id', '', interaction.user.id);
     database.logAdmin(interaction.guildId, interaction.user.id, 'booster_role_clear', '');
     return interaction.update(boosterXpPayload(interaction.guildId, 'تم إلغاء شرط الرتبة؛ سيكفي وجود Server Boost نشط.'));
+  }
+  if (parts[1] === 'genie' && parts[2] === 'toggle') {
+    const enabled = database.getConfig(interaction.guildId, 'genie_enabled', '0') !== '1';
+    if (enabled && !database.getConfig(interaction.guildId, 'genie_channel_id', '')) {
+      return interaction.reply({ content: 'حدد روم لعبة المارد أولاً قبل تفعيلها.', flags: MessageFlags.Ephemeral });
+    }
+    database.setConfig(interaction.guildId, 'genie_enabled', enabled ? '1' : '0', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'genie_toggle', String(enabled));
+    return interaction.update(genieAdminPayload(interaction.guildId, enabled ? 'تم تفعيل لعبة المارد.' : 'تم إيقاف لعبة المارد.'));
+  }
+  if (parts[1] === 'genie' && parts[2] === 'reward-toggle') {
+    const enabled = database.getConfig(interaction.guildId, 'genie_reward_enabled', '1') !== '1';
+    const configuredReward = Number(database.getConfig(interaction.guildId, 'genie_reward_coins', '25')) || 0;
+    if (enabled && configuredReward < 1) return interaction.reply({ content: 'حدد قيمة جائزة أكبر من صفر أولاً، أو اترك اللعبة بدون جائزة.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'genie_reward_enabled', enabled ? '1' : '0', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'genie_reward_toggle', String(enabled));
+    return interaction.update(genieAdminPayload(interaction.guildId, enabled ? 'تم تفعيل الجائزة.' : 'تم إلغاء الجائزة؛ اللعبة ستبقى متاحة بدون مكافأة.'));
+  }
+  if (parts[1] === 'genie' && parts[2] === 'channel' && interaction.isChannelSelectMenu()) {
+    const channel = await interaction.guild.channels.fetch(interaction.values[0]).catch(() => null);
+    if (!channel || channel.type !== ChannelType.GuildText) return interaction.reply({ content: 'اختر رومًا كتابياً عادياً للعبة.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'genie_channel_id', channel.id, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'genie_channel_set', channel.id);
+    return interaction.update(genieAdminPayload(interaction.guildId, `تم تحديد ${channel} للعبة المارد.`));
+  }
+  if (parts[1] === 'genie' && parts[2] === 'clear-channel') {
+    database.setConfig(interaction.guildId, 'genie_channel_id', '', interaction.user.id);
+    database.setConfig(interaction.guildId, 'genie_enabled', '0', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'genie_channel_clear', '');
+    return interaction.update(genieAdminPayload(interaction.guildId, 'تم إلغاء الروم وإيقاف اللعبة لحين تحديد روم جديد.'));
+  }
+  if (parts[1] === 'genie' && parts[2] === 'reward-edit') {
+    const current = database.getConfig(interaction.guildId, 'genie_reward_coins', '25');
+    const modal = new ModalBuilder().setCustomId('admin:genie:reward-save').setTitle('تعديل جائزة المارد')
+      .addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('amount').setLabel('DOS Coin للفوز (0 = بدون جائزة)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(8).setValue(String(current))));
+    return interaction.showModal(modal);
+  }
+  if (parts[1] === 'genie' && parts[2] === 'limits-edit') {
+    const current = {
+      questions: database.getConfig(interaction.guildId, 'genie_max_questions', '15'),
+      guesses: database.getConfig(interaction.guildId, 'genie_max_guesses', '3'),
+      cooldown: database.getConfig(interaction.guildId, 'genie_cooldown_seconds', '60'),
+      timeout: database.getConfig(interaction.guildId, 'genie_session_timeout_minutes', '30')
+    };
+    const modal = new ModalBuilder().setCustomId('admin:genie:limits-save').setTitle('إعدادات أسئلة المارد')
+      .addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('questions').setLabel('أقصى عدد أسئلة (5 إلى 30)').setStyle(TextInputStyle.Short).setRequired(true).setValue(String(current.questions))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('guesses').setLabel('عدد التخمينات (1 إلى 10)').setStyle(TextInputStyle.Short).setRequired(true).setValue(String(current.guesses))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('cooldown').setLabel('وقت الانتظار بالثواني (0 بلا انتظار)').setStyle(TextInputStyle.Short).setRequired(true).setValue(String(current.cooldown))),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('timeout').setLabel('إنهاء الجلسة المهجورة بالدقائق (0 بلا انتهاء)').setStyle(TextInputStyle.Short).setRequired(true).setValue(String(current.timeout)))
+      );
+    return interaction.showModal(modal);
+  }
+  if (parts[1] === 'genie' && parts[2] === 'stats') {
+    return interaction.update(genieAdminPayload(interaction.guildId, 'تم تحديث إحصائيات اللعبة.'));
   }
   if (parts[1] === 'boost-xp' && parts[2] === 'edit') {
     const current = database.getConfig(interaction.guildId, 'booster_xp_multiplier', '1.5');
@@ -1084,6 +1183,29 @@ async function handleAdminModal(interaction) {
   const parts = interaction.customId.split(':');
   if (parts[0] !== 'admin') return false;
   if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions,interaction.guildId)) return interaction.reply({ content: 'هذه العملية للإدارة فقط.', flags: MessageFlags.Ephemeral });
+  if (parts[1] === 'genie' && parts[2] === 'reward-save') {
+    const amount = Number(interaction.fields.getTextInputValue('amount').trim());
+    if (!Number.isSafeInteger(amount) || amount < 0 || amount > 100000) return interaction.reply({ content: 'أدخل قيمة بين 0 و100000 DOS Coin.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'genie_reward_coins', amount, interaction.user.id);
+    database.setConfig(interaction.guildId, 'genie_reward_enabled', amount > 0 ? '1' : '0', interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'genie_reward_update', String(amount));
+    return interaction.reply({ content: amount ? `✅ جائزة الفوز بالمارد أصبحت ${amount.toLocaleString('en-US')} DOS Coin.` : '✅ تم إلغاء جائزة لعبة المارد. اللعبة ستعمل بدون جائزة.', flags: MessageFlags.Ephemeral });
+  }
+  if (parts[1] === 'genie' && parts[2] === 'limits-save') {
+    const questions = Number(interaction.fields.getTextInputValue('questions').trim());
+    const guesses = Number(interaction.fields.getTextInputValue('guesses').trim());
+    const cooldown = Number(interaction.fields.getTextInputValue('cooldown').trim());
+    const timeout = Number(interaction.fields.getTextInputValue('timeout').trim());
+    if (!Number.isSafeInteger(questions) || questions < 5 || questions > 30 || !Number.isSafeInteger(guesses) || guesses < 1 || guesses > 10 || !Number.isSafeInteger(cooldown) || cooldown < 0 || cooldown > 86400 || !Number.isSafeInteger(timeout) || timeout < 0 || timeout > 1440) {
+      return interaction.reply({ content: 'تحقق من القيم: الأسئلة 5–30، التخمينات 1–10، الانتظار 0–86400 ثانية، وانتهاء الجلسة 0–1440 دقيقة.', flags: MessageFlags.Ephemeral });
+    }
+    database.setConfig(interaction.guildId, 'genie_max_questions', questions, interaction.user.id);
+    database.setConfig(interaction.guildId, 'genie_max_guesses', guesses, interaction.user.id);
+    database.setConfig(interaction.guildId, 'genie_cooldown_seconds', cooldown, interaction.user.id);
+    database.setConfig(interaction.guildId, 'genie_session_timeout_minutes', timeout, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'genie_limits_update', `${questions};${guesses};${cooldown};${timeout}`);
+    return interaction.reply({ content: '✅ تم حفظ حدود الأسئلة والتخمينات ووقت الانتظار وانتهاء الجلسات المهجورة.', flags: MessageFlags.Ephemeral });
+  }
   if (parts[1] === 'shop' && parts[2] === 'subtitle-save') {
     const subtitle = interaction.fields.getTextInputValue('subtitle').trim().slice(0, 90);
     database.setConfig(interaction.guildId, 'shop_subtitle', subtitle, interaction.user.id);
@@ -1278,4 +1400,4 @@ async function handleAdminModal(interaction) {
   return false;
 }
 
-module.exports = { isAdmin, homePayload, shopAdminPayload, shopSettingsPayload, adminAccessPayload, contentAdminPayload, joinWelcomePayload, memberWelcomeCardPayload, boosterXpPayload, dailyQuestionAdminPayload, inviteRewardsPayload, tasksAdminPayload, taskDetailsPayload, taskClaimsPayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };
+module.exports = { isAdmin, homePayload, genieAdminPayload, shopAdminPayload, shopSettingsPayload, adminAccessPayload, contentAdminPayload, joinWelcomePayload, memberWelcomeCardPayload, boosterXpPayload, dailyQuestionAdminPayload, inviteRewardsPayload, tasksAdminPayload, taskDetailsPayload, taskClaimsPayload, featuresPayload, economyPayload, memberToolsPayload, rolesPayload, levelRolesPayload, salesPayload, roomsPayload, handleAdminInteraction, handleAdminModal };

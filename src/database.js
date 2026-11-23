@@ -53,7 +53,11 @@ db.exec(
   'CREATE TABLE IF NOT EXISTS dm_announcement_subscribers (guild_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,user_id));' +
   "CREATE TABLE IF NOT EXISTS dm_broadcast_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, created_by TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','completed','cancelled')), total_count INTEGER NOT NULL DEFAULT 0, sent_count INTEGER NOT NULL DEFAULT 0, failed_count INTEGER NOT NULL DEFAULT 0, skipped_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch()));" +
   "CREATE TABLE IF NOT EXISTS dm_broadcast_recipients (job_id INTEGER NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed','skipped')), error TEXT NOT NULL DEFAULT '', attempted_at INTEGER, PRIMARY KEY(job_id,user_id));" +
-  'CREATE INDEX IF NOT EXISTS idx_dm_broadcast_queue ON dm_broadcast_recipients(job_id,status);'
+  'CREATE INDEX IF NOT EXISTS idx_dm_broadcast_queue ON dm_broadcast_recipients(job_id,status);' +
+  "CREATE TABLE IF NOT EXISTS genie_sessions (guild_id TEXT NOT NULL, user_id TEXT NOT NULL, channel_id TEXT NOT NULL, message_id TEXT NOT NULL, state_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','completed')), created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch()), PRIMARY KEY(guild_id,user_id));" +
+  'CREATE INDEX IF NOT EXISTS idx_genie_sessions_status ON genie_sessions(guild_id,status);' +
+  "CREATE TABLE IF NOT EXISTS genie_stats (guild_id TEXT NOT NULL, user_id TEXT NOT NULL, total_games INTEGER NOT NULL DEFAULT 0, wins INTEGER NOT NULL DEFAULT 0, questions_total INTEGER NOT NULL DEFAULT 0, coins_earned INTEGER NOT NULL DEFAULT 0, last_played_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(guild_id,user_id));" +
+  'CREATE INDEX IF NOT EXISTS idx_genie_stats_wins ON genie_stats(guild_id,wins DESC,total_games ASC);'
 );
 
 // Additive migration for databases created by older versions.
@@ -577,6 +581,59 @@ function latestDmBroadcastJob(guildId) {
   return db.prepare('SELECT * FROM dm_broadcast_jobs WHERE guild_id=? ORDER BY id DESC LIMIT 1').get(guildId) || null;
 }
 
+function getGenieSession(guildId, userId) {
+  const row = db.prepare('SELECT * FROM genie_sessions WHERE guild_id=? AND user_id=?').get(guildId, userId);
+  if (!row) return null;
+  try { row.state = JSON.parse(row.state_json || '{}'); }
+  catch { row.state = {}; }
+  return row;
+}
+function saveGenieSession(guildId, userId, channelId, messageId, state) {
+  const result = db.prepare(`INSERT INTO genie_sessions(guild_id,user_id,channel_id,message_id,state_json,status)
+    VALUES(?,?,?,?,?,'active')
+    ON CONFLICT(guild_id,user_id) DO UPDATE SET channel_id=excluded.channel_id,message_id=excluded.message_id,
+      state_json=excluded.state_json,status='active',created_at=unixepoch(),updated_at=unixepoch()
+    WHERE genie_sessions.status!='active'`).run(guildId,userId,channelId,messageId,JSON.stringify(state || {}));
+  return result.changes === 1;
+}
+function updateGenieSession(guildId, userId, state, messageId) {
+  return db.prepare(`UPDATE genie_sessions SET state_json=?,message_id=COALESCE(?,message_id),updated_at=unixepoch()
+    WHERE guild_id=? AND user_id=? AND status='active'`).run(JSON.stringify(state || {}),messageId || null,guildId,userId).changes === 1;
+}
+function expireGenieSession(guildId, userId) {
+  return db.prepare("UPDATE genie_sessions SET status='completed',updated_at=unixepoch() WHERE guild_id=? AND user_id=? AND status='active'").run(guildId,userId).changes === 1;
+}
+function getGenieStats(guildId, userId) {
+  return db.prepare('SELECT * FROM genie_stats WHERE guild_id=? AND user_id=?').get(guildId,userId) || {
+    guild_id:guildId,user_id:userId,total_games:0,wins:0,questions_total:0,coins_earned:0,last_played_at:0
+  };
+}
+function getGenieLeaderboard(guildId, limit = 10) {
+  return db.prepare('SELECT user_id,total_games,wins,questions_total,coins_earned FROM genie_stats WHERE guild_id=? AND total_games>0 ORDER BY wins DESC,total_games DESC,questions_total ASC LIMIT ?')
+    .all(guildId,Math.max(1,Math.min(25,Number(limit)||10)));
+}
+const completeGenieGameTransaction = db.transaction((guildId,userId,won,questions,rewardCoins) => {
+  const session = db.prepare("SELECT status FROM genie_sessions WHERE guild_id=? AND user_id=?").get(guildId,userId);
+  if (!session || session.status !== 'active') return null;
+  db.prepare("UPDATE genie_sessions SET status='completed',updated_at=unixepoch() WHERE guild_id=? AND user_id=? AND status='active'").run(guildId,userId);
+  const reward = won ? Math.max(0,Math.min(100000,Math.floor(Number(rewardCoins)||0))) : 0;
+  if (reward > 0) {
+    ensureMember(guildId,userId);
+    db.prepare('UPDATE members SET coins=coins+?,updated_at=unixepoch() WHERE guild_id=? AND user_id=?').run(reward,guildId,userId);
+    db.prepare("INSERT INTO xp_events(guild_id,user_id,event_type,amount) VALUES(?,?,'coins',?)").run(guildId,userId,reward);
+  }
+  db.prepare(`INSERT INTO genie_stats(guild_id,user_id,total_games,wins,questions_total,coins_earned,last_played_at)
+    VALUES(?,?,1,?,?,?,unixepoch())
+    ON CONFLICT(guild_id,user_id) DO UPDATE SET total_games=genie_stats.total_games+1,
+      wins=genie_stats.wins+excluded.wins,questions_total=genie_stats.questions_total+excluded.questions_total,
+      coins_earned=genie_stats.coins_earned+excluded.coins_earned,last_played_at=unixepoch()`)
+    .run(guildId,userId,won?1:0,Math.max(0,Math.floor(Number(questions)||0)),reward);
+  return { won:Boolean(won), rewardCoins:reward };
+});
+function completeGenieGame(guildId,userId,won,questions,rewardCoins) {
+  return completeGenieGameTransaction(guildId,userId,Boolean(won),questions,rewardCoins);
+}
+
 function pruneXpEvents() {
   return db.prepare('DELETE FROM xp_events WHERE created_at < unixepoch() - 45*86400').run().changes;
 }
@@ -627,5 +684,6 @@ module.exports = {
   setTaskMessageProgress,
   setDmAnnouncementSubscription, isDmAnnouncementSubscriber, dmAnnouncementSubscribers, dmAnnouncementSubscriberCount,
   createDmBroadcastJob, activeDmBroadcastJobs, nextDmBroadcastRecipient, markDmBroadcastRecipient, getDmBroadcastJob, latestDmBroadcastJob,
+  getGenieSession, saveGenieSession, updateGenieSession, expireGenieSession, getGenieStats, getGenieLeaderboard, completeGenieGame,
   close: () => db.close()
 };

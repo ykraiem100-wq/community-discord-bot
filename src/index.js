@@ -18,6 +18,7 @@ const { getBoosterMultiplier, applyXpMultiplier } = require('./booster-xp');
 const { getLevelRoleTransition } = require('./level-roles');
 const { isAdmin, homePayload, handleAdminInteraction, handleAdminModal } = require('./admin');
 const { broadcastStatusText, processDmBroadcastTick } = require('./broadcast');
+const { startGenieGame, handleGenieInteraction } = require('./genie');
 
 const token = (process.env.DISCORD_TOKEN || '').trim();
 const clientId = (process.env.DISCORD_CLIENT_ID || '').trim();
@@ -80,6 +81,7 @@ const PREFIX_COMMAND_KEYS = Object.freeze({
   'اضافة_عملات': 'add_coins', 'إضافة_عملات': 'add_coins', 'add-coins': 'add_coins',
   'اضافة_xp': 'add_xp', 'إضافة_xp': 'add_xp', 'اضافة_خبرة': 'add_xp', 'إضافة_خبرة': 'add_xp', 'add-xp': 'add_xp',
   'reset': 'reset_member', 'ريست': 'reset_member', 'reset-member': 'reset_member',
+  'المارد': 'genie',
   'تعيين_قناة': 'set_channel', 'رتبة_مستوى': 'level_role'
 });
 const SLASH_COMMAND_KEYS = Object.freeze({
@@ -120,6 +122,7 @@ function helpEmbed() {
     '/wallet أو .محفظتي أو r — عرض المحفظة',
     '/top أو اكتب TOP — المتصدرون',
     '/shop أو .المتجر — متجر DOS',
+    '.المارد — لعبة التخمين التفاعلية (في الروم الذي تحدده الإدارة)',
     '/color-selection — استكمال اختيار اللون برقم الطلب إن تعذّر فتح الرسائل الخاصة',
     '.متصدرين كتابي / صوتي / عملات — ترتيب مختصر',
     '.إحصائيات — إحصائيات السيرفر',
@@ -318,6 +321,10 @@ async function handleCommand(message, rawCommandText = null) {
     }
     if (command === 'مهامي') {
       return message.reply(memberTasksPayload(guildId, userId));
+    }
+    if (command === 'المارد') {
+      if (!commandEnabled(guildId, 'genie')) return message.reply('أمر لعبة المارد متوقف حالياً من لوحة التحكم.');
+      return startGenieGame(message, database);
     }
     if (command === 'دعواتي') {
       const count = database.inviteCount(guildId, userId);
@@ -702,6 +709,10 @@ client.on('interactionCreate',async (interaction) => {
           await processDmBroadcastTick(client).catch(() => {});
           return interaction.editReply({ content: `✅ تم إنشاء الإعلان #${created.id} وبدأ الإرسال التدريجي إلى **${created.total.toLocaleString('en-US')}** عضو مشترك. تابع التقدم باستخدام /dm-announcement-status.`, embeds: [], components: [] });
         }
+      }
+      if (interaction.customId.startsWith('genie:')) {
+        const handled = await handleGenieInteraction(interaction, database);
+        if (handled !== false) return handled;
       }
       if (interaction.customId.startsWith('tasks:')) {
         const taskHandled = await handleTaskInteraction(interaction);
