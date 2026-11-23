@@ -47,7 +47,7 @@ The bot needs View Channel, Send Messages, Read Message History, Embed Links, Ma
 
 ## Main panel and content
 
-Use `/admin-panel` → **رتب المستويات** to link separate writing and voice reward roles to level thresholds. Use `/admin-panel` → **اللوحات والرسائل** to edit the title and body for the welcome panel, rules, information, notification roles, system, events/Arena, Social Media, Apply, and New/News. The welcome image includes the current server icon and name, bilingual welcome copy, and a signature using the server owner's display name. Its seven buttons match the supplied reference: **Server Rules**, **Read Information**, **Roles**, **Social Media**, **Apply**, **New**, and **Arena**. Button responses are ephemeral/private to the member. Use **نشر / تحديث اللوحة الرئيسية** to publish the panel in a chosen text channel.
+Use `/admin-panel` → **رتب المستويات** to link separate writing and voice reward roles to level thresholds. Use `/admin-panel` → **اللوحات والرسائل** to edit the title and body for the welcome panel, rules, information, notification roles, system, events/Arena, Social Media, Apply, and New/News. The welcome image includes the current server icon and name, bilingual welcome copy, and a signature using the server owner's display name. Its button list is fully configurable: add buttons, rename them (Arabic or English), change their emoji, choose an internal page or an external HTTPS link, show/hide, delete, and move buttons up or down. Select a button from the third menu, then use the action buttons below it. For an internal destination enter one of: `rules`, `info`, `notifications`, `roles`, `system`, `events`, `social`, `apply`, or `news`; for an external button enter a full `https://` URL. Changes refresh the published panel automatically when its channel/message are still available. Internal button responses are ephemeral/private to the member. Use **نشر / تحديث اللوحة الرئيسية** to publish the panel in a chosen text channel.
 
 ## Admin access and private voice controls
 
@@ -108,7 +108,7 @@ Run locally or in CI: `npm install`, `npm run check`, `npm test`, `npm start`. G
 
 ### التحكم بأزرار رسالة الترحيب
 
-من `/admin-panel` افتح **اللوحات والرسائل**. القائمة الثالثة تعرض أزرار رسالة الترحيب المتاحة؛ حدد الأزرار التي تريد إظهارها أو أزل تحديد الأزرار التي تريد إخفاءها. يتم حفظ الاختيار في `guild_config` وتحديث رسالة الترحيب المنشورة تلقائياً إذا كانت محددة. ترك جميع الخيارات دون تحديد يخفي الأزرار كلها.
+من `/admin-panel` افتح **اللوحات والرسائل**. القائمة الثالثة تعرض كل الأزرار الموجودة؛ اختر الزر الذي تريد تعديله، ثم استخدم **تعديل المحدد** لتغيير الاسم والإيموجي والوجهة. استخدم **إضافة زر** لإنشاء زر جديد، و**إخفاء/إظهار** للتحكم بظهوره، و**حذف المحدد** لإزالته، و**تحريك للأعلى/للأسفل** لتغيير ترتيبه. يمكن كتابة الأسماء بالعربية أو الإنجليزية مثل تغيير `Server Rules` إلى `القوانين`. تُحفظ التعريفات في `guild_config` وتُحدّث رسالة الترحيب المنشورة تلقائياً إذا كانت متاحة. يقبل حقل الوجهة أسماء الصفحات الداخلية الموضحة في القسم أعلاه أو رابطاً خارجياً يبدأ بـ `https://`.
 
 صورة المتجر تستخدم الخلفية العريضة فقط مع كلمة DOS كبيرة داخل الدائرة، من دون صندوق إضافي أو كتابة داخل الصورة. تظهر خيارات المنتجات في قائمة الشراء أسفل الصورة.
 
