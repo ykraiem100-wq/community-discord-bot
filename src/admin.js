@@ -5,7 +5,8 @@ const {
   ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ChannelType, PermissionsBitField, MessageFlags
 } = require('discord.js');
 const database = require('./database');
-const { CYAN, DEFAULT_CONTENT, MAIN_PANEL_BUTTONS, selectedMainPanelButtons, makeContentEmbed, publishMainPanel } = require('./panels');
+const { randomUUID } = require('node:crypto');
+const { CYAN, DEFAULT_CONTENT, MAIN_PANEL_BUTTONS, PANEL_PAGE_TARGETS, getMainPanelButtons, selectedMainPanelButtons, makeContentEmbed, publishMainPanel } = require('./panels');
 const { deliverProduct, publishShop, refreshPublishedShop } = require('./shop');
 const { renderAdminDashboard, renderAdminSection } = require('./render');
 const { questionSettingsPayload, nextRandomSchedule } = require('./daily-questions');
@@ -187,27 +188,115 @@ function adminAccessPayload(guildId, notice = '') {
   ] }, 'صلاحيات الإدارة', 'اختر رتبة الإدارة وروم لوحة التحكم', 'ACCESS');
 }
 
+function selectedPanelButtonId(guildId) {
+  const buttons = getMainPanelButtons(guildId);
+  const saved = database.getConfig(guildId, 'main_panel_selected_button', '');
+  return buttons.some((button) => button.id === saved) ? saved : (buttons[0]?.id || '');
+}
+
+function panelButtonModal(guildId, button = null) {
+  const modal = new ModalBuilder()
+    .setCustomId(button ? `admin:content:button-save:${button.id}` : 'admin:content:button-save:new')
+    .setTitle(button ? 'تعديل زر رسالة الترحيب' : 'إضافة زر لرسالة الترحيب');
+  const label = new TextInputBuilder().setCustomId('label').setLabel('اسم الزر الذي سيظهر للأعضاء')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(80).setPlaceholder('مثال: القوانين');
+  if (button?.label) label.setValue(button.label.slice(0, 80));
+  const emoji = new TextInputBuilder().setCustomId('emoji').setLabel('إيموجي الزر (اختياري)')
+    .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(80).setPlaceholder('📕 أو اتركه فارغاً');
+  if (button?.emoji) emoji.setValue(button.emoji.slice(0, 80));
+  const destination = new TextInputBuilder().setCustomId('destination').setLabel('الوجهة: صفحة أو رابط HTTPS')
+    .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(200)
+    .setPlaceholder('rules أو info أو roles أو https://example.com');
+  if (button?.destination) destination.setValue(button.destination.slice(0, 200));
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(label),
+    new ActionRowBuilder().addComponents(emoji),
+    new ActionRowBuilder().addComponents(destination)
+  );
+  return modal;
+}
+
 function contentAdminPayload(guildId, notice = '') {
   const editMenu = new StringSelectMenuBuilder().setCustomId('admin:content:choose').setPlaceholder('اختر رسالة لتعديلها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
   const previewMenu = new StringSelectMenuBuilder().setCustomId('admin:content:preview').setPlaceholder('معاينة رسالة قبل اعتمادها')
     .addOptions(CONTENT_KEYS.map(([key,label]) => ({ label, value: key })));
-  const selected = new Set(guildId ? selectedMainPanelButtons(guildId) : MAIN_PANEL_BUTTONS.map((item) => item.key));
-  const buttonMenu = new StringSelectMenuBuilder().setCustomId('admin:content:buttons')
-    .setPlaceholder('اختر الأزرار التي تريد إظهارها في الترحيب')
-    .setMinValues(0).setMaxValues(MAIN_PANEL_BUTTONS.length)
-    .addOptions(MAIN_PANEL_BUTTONS.map((item) => ({
-      label: item.label, value: item.key, emoji: item.emoji, default: selected.has(item.key),
-      description: `زر ${item.label} في رسالة الترحيب`
+  const buttons = getMainPanelButtons(guildId);
+  const selectedId = selectedPanelButtonId(guildId);
+  const buttonMenu = new StringSelectMenuBuilder().setCustomId('admin:content:button-select')
+    .setPlaceholder('اختر الزر الذي تريد تعديله أو ترتيبه');
+  if (buttons.length) {
+    buttonMenu.addOptions(buttons.slice(0, 25).map((item) => ({
+      label: `${item.enabled ? '🟢' : '⚫'} ${item.label}`.slice(0, 100),
+      value: item.id,
+      ...(item.emoji ? { emoji: item.emoji } : {}),
+      description: `الوجهة: ${PANEL_PAGE_TARGETS.includes(item.destination) ? item.destination : 'رابط خارجي'}`.slice(0, 100),
+      default: item.id === selectedId
     })));
-  const description = 'اختر الرسالة التي تريد تعديلها. تستطيع تغيير العنوان والنص كاملاً، ثم حفظها.\n\n**أزرار رسالة الترحيب:** اختر من القائمة الثالثة الأزرار التي تريد إظهارها أو إخفاءها. يتحدث منشور الترحيب تلقائياً بعد الحفظ.\n\n' + (notice ? `✅ ${notice}\n\n` : '') + 'الرسائل المتاحة: الترحيب، القوانين، المعلومات، الرتب، منصات التواصل، التقديم، وآخر التحديثات.';
+  } else {
+    buttonMenu.addOptions({ label: 'لا توجد أزرار — أضف زرّاً جديداً', value: '__none__' }).setDisabled(true);
+  }
+  const selected = buttons.find((item) => item.id === selectedId);
+  const buttonSummary = buttons.length
+    ? buttons.map((item, index) => `${index + 1}. ${item.emoji ? item.emoji + ' ' : ''}**${item.label}** — ${item.enabled ? 'ظاهر' : 'مخفي'}`).join('\n')
+    : 'لا توجد أزرار. أضف أول زر من الأسفل.';
+  const description = [
+    'اختر الرسالة التي تريد تعديلها. تستطيع تغيير العنوان والنص كاملاً، ثم حفظها.',
+    '',
+    '**إدارة أزرار رسالة الترحيب:** أضف زرّاً جديداً، أو غيّر اسمه وإيموجيه ووجهته، أو أخفه/أظهره، أو غيّر ترتيبه، أو احذفه. بعد كل تعديل يتم تحديث اللوحة المنشورة تلقائياً.',
+    '**الوجهات الداخلية المتاحة:** `rules` القوانين، `info` المعلومات، `notifications` رتب التفاعل، `system` نظام السيرفر، `events` الفعاليات، `social` التواصل، `apply` التقديم، `news` التحديثات، `roles` اختيار الرتب.',
+    'يمكن أيضاً وضع رابط يبدأ بـ `https://` ليصبح الزر رابطاً خارجياً.',
+    '',
+    '**الأزرار الحالية:**', buttonSummary,
+    ...(selected ? ['', `**الزر المحدد:** ${selected.label} • ${selected.enabled ? 'ظاهر' : 'مخفي'}`] : []),
+    ...(notice ? ['', `✅ ${notice}`] : []),
+    '',
+    'الرسائل المتاحة للتعديل: الترحيب، القوانين، المعلومات، الرتب، منصات التواصل، التقديم، وآخر التحديثات.'
+  ].join('\n');
   return withSectionImage({ embeds: [adminEmbed('📝 إدارة اللوحات والرسائل', description)], components: [
     new ActionRowBuilder().addComponents(editMenu),
     new ActionRowBuilder().addComponents(previewMenu),
     new ActionRowBuilder().addComponents(buttonMenu),
-    new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة الرئيسية').setStyle(ButtonStyle.Primary), new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary))
-  ] }, 'اللوحات والرسائل', 'تعديل القوانين ورسالة الترحيب والتحكم بأزرارها', 'CONTENT');
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:content:button-add').setLabel('إضافة زر').setEmoji('➕').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('admin:content:button-edit').setLabel('تعديل المحدد').setEmoji('✏️').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:content:button-toggle').setLabel(selected?.enabled ? 'إخفاء الزر' : 'إظهار الزر').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:content:button-delete').setLabel('حذف المحدد').setEmoji('🗑️').setStyle(ButtonStyle.Danger)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('admin:content:button-up').setLabel('تحريك للأعلى').setEmoji('⬆️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:content:button-down').setLabel('تحريك للأسفل').setEmoji('⬇️').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('admin:panel:publish').setLabel('نشر / تحديث اللوحة').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('admin:home').setLabel('رجوع').setStyle(ButtonStyle.Secondary)
+    )
+  ] }, 'اللوحات والرسائل', 'تعديل الرسائل وأسماء أزرار الترحيب وروابطها وترتيبها', 'CONTENT');
 }
+
+async function refreshPublishedMainPanel(guild) {
+  const settings = database.settings(guild.id);
+  if (!settings.panel_channel_id || !settings.panel_message_id) return false;
+  const channel = await guild.channels.fetch(settings.panel_channel_id).catch(() => null);
+  if (!channel || !channel.isTextBased()) return false;
+  await publishMainPanel(guild, channel);
+  return true;
+}
+
+function validPanelDestination(raw) {
+  const value = String(raw || '').trim();
+  if (PANEL_PAGE_TARGETS.includes(value)) return value;
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:' && url.hostname && !url.username && !url.password) return url.toString();
+  } catch { /* invalid URL */ }
+  return null;
+}
+
+function validPanelEmoji(value) {
+  if (!value) return true;
+  if (/^<a?:[a-zA-Z0-9_]{2,32}:\d{15,22}>$/.test(value)) return true;
+  return /\p{Extended_Pictographic}/u.test(value) && !/[\r\n]/.test(value);
+}
+
 function joinWelcomePayload(guildId, notice = '') {
   const enabled = database.getConfig(guildId, 'join_welcome_enabled', '1') !== '0';
   const channelId = database.getConfig(guildId, 'join_welcome_channel_id', '') || database.settings(guildId).welcome_channel_id || '';
@@ -1116,20 +1205,64 @@ async function handleAdminInteraction(interaction, client) {
     database.logAdmin(interaction.guildId,interaction.user.id,'room_closed',`id=${id}`);
     return interaction.update({ content: `تم إغلاق الغرفة #${id}.`, embeds: [], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:rooms:back').setLabel('العودة للغرف').setStyle(ButtonStyle.Secondary))] });
   }
-  if (parts[1] === 'content' && parts[2] === 'buttons' && interaction.isStringSelectMenu()) {
-    const allowed = new Set(MAIN_PANEL_BUTTONS.map((item) => item.key));
-    const chosen = MAIN_PANEL_BUTTONS.map((item) => item.key).filter((key) => interaction.values.includes(key) && allowed.has(key));
-    database.setConfig(interaction.guildId, 'main_panel_buttons', JSON.stringify(chosen), interaction.user.id);
-    database.logAdmin(interaction.guildId, interaction.user.id, 'main_panel_buttons_update', chosen.join(','));
-    let refreshed = false;
-    const settings = database.settings(interaction.guildId);
-    const channel = settings.panel_channel_id ? await interaction.guild.channels.fetch(settings.panel_channel_id).catch(() => null) : null;
-    if (channel && channel.isTextBased()) {
-      try { await publishMainPanel(interaction.guild, channel); refreshed = true; }
-      catch (error) { console.error('[ADMIN] Main panel button refresh failed:', error.message); }
+  if (parts[1] === 'content' && parts[2] === 'button-select' && interaction.isStringSelectMenu()) {
+    const buttons = getMainPanelButtons(interaction.guildId);
+    const id = interaction.values[0];
+    if (!buttons.some((item) => item.id === id)) return interaction.reply({ content: 'الزر المحدد لم يعد موجوداً.', flags: MessageFlags.Ephemeral });
+    database.setConfig(interaction.guildId, 'main_panel_selected_button', id, interaction.user.id);
+    return interaction.update(contentAdminPayload(interaction.guildId, `تم تحديد الزر: ${buttons.find((item) => item.id === id).label}.`));
+  }
+  if (parts[1] === 'content' && parts[2] === 'button-add') {
+    if (getMainPanelButtons(interaction.guildId).length >= 25) return interaction.reply({ content: 'وصلت إلى الحد الأقصى وهو 25 زرّاً في رسالة الترحيب.', flags: MessageFlags.Ephemeral });
+    return interaction.showModal(panelButtonModal(interaction.guildId));
+  }
+  if (parts[1] === 'content' && parts[2] === 'button-edit') {
+    const id = selectedPanelButtonId(interaction.guildId);
+    const button = getMainPanelButtons(interaction.guildId).find((item) => item.id === id);
+    if (!button) return interaction.reply({ content: 'اختر زرّاً من القائمة أولاً.', flags: MessageFlags.Ephemeral });
+    return interaction.showModal(panelButtonModal(interaction.guildId, button));
+  }
+  if (parts[1] === 'content' && ['button-toggle', 'button-delete', 'button-up', 'button-down'].includes(parts[2])) {
+    const buttons = getMainPanelButtons(interaction.guildId);
+    const id = selectedPanelButtonId(interaction.guildId);
+    const index = buttons.findIndex((item) => item.id === id);
+    if (index < 0) return interaction.reply({ content: 'اختر زرّاً من القائمة أولاً.', flags: MessageFlags.Ephemeral });
+    let notice = '';
+    if (parts[2] === 'button-toggle') {
+      buttons[index].enabled = !buttons[index].enabled;
+      notice = buttons[index].enabled ? `تم إظهار زر ${buttons[index].label}.` : `تم إخفاء زر ${buttons[index].label}.`;
+    } else if (parts[2] === 'button-delete') {
+      const [removed] = buttons.splice(index, 1);
+      database.setConfig(interaction.guildId, 'main_panel_selected_button', buttons[Math.min(index, buttons.length - 1)]?.id || '', interaction.user.id);
+      notice = `تم حذف زر ${removed.label}.`;
+    } else {
+      const nextIndex = parts[2] === 'button-up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= buttons.length) return interaction.reply({ content: 'لا يمكن تحريك الزر أكثر في هذا الاتجاه.', flags: MessageFlags.Ephemeral });
+      [buttons[index], buttons[nextIndex]] = [buttons[nextIndex], buttons[index]];
+      notice = `تم تغيير ترتيب زر ${buttons[nextIndex].label}.`;
     }
-    const names = MAIN_PANEL_BUTTONS.filter((item) => chosen.includes(item.key)).map((item) => item.label);
-    const notice = chosen.length ? `تم تحديث الأزرار (${chosen.length}): ${names.join('، ')}.${refreshed ? ' وتم تحديث رسالة الترحيب المنشورة.' : ' انشر اللوحة من الزر أدناه لتطبيقها في القناة.'}` : `تم إخفاء جميع أزرار رسالة الترحيب.${refreshed ? ' وتم تحديث الرسالة المنشورة.' : ' انشر اللوحة من الزر أدناه لتطبيق التغيير.'}`;
+    database.setConfig(interaction.guildId, 'main_panel_custom_buttons', JSON.stringify(buttons), interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, `main_panel_${parts[2]}`, id);
+    const refreshed = await refreshPublishedMainPanel(interaction.guild).catch((error) => {
+      console.error('[ADMIN] Main panel refresh failed:', error.message);
+      return false;
+    });
+    return interaction.update(contentAdminPayload(interaction.guildId, notice + (refreshed ? ' تم تحديث اللوحة المنشورة تلقائياً.' : ' انشر اللوحة لتطبيق التغيير.')));
+  }
+  if (parts[1] === 'content' && parts[2] === 'buttons' && interaction.isStringSelectMenu()) {
+    const chosen = new Set(interaction.values);
+    const buttons = getMainPanelButtons(interaction.guildId);
+    for (const button of buttons) {
+      if (MAIN_PANEL_BUTTONS.some((item) => item.key === button.id)) button.enabled = chosen.has(button.id);
+    }
+    database.setConfig(interaction.guildId, 'main_panel_custom_buttons', JSON.stringify(buttons), interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, 'main_panel_buttons_legacy_update', [...chosen].join(','));
+    const refreshed = await refreshPublishedMainPanel(interaction.guild).catch((error) => {
+      console.error('[ADMIN] Main panel refresh failed:', error.message);
+      return false;
+    });
+    const visibleNames = buttons.filter((item) => item.enabled).map((item) => item.label);
+    const notice = `تم تحديث الأزرار الظاهرة (${visibleNames.length}): ${visibleNames.join('، ') || 'لا يوجد'}.${refreshed ? ' وتم تحديث رسالة الترحيب المنشورة.' : ' انشر اللوحة لتطبيق التغيير.'}`;
     return interaction.update(contentAdminPayload(interaction.guildId, notice));
   }
   if (parts[1] === 'content' && parts[2] === 'choose' && interaction.isStringSelectMenu()) return interaction.showModal(contentModal(interaction.values[0],interaction.guildId));
@@ -1183,6 +1316,42 @@ async function handleAdminModal(interaction) {
   const parts = interaction.customId.split(':');
   if (parts[0] !== 'admin') return false;
   if (!isAdmin(interaction.member,interaction.user.id,interaction.memberPermissions,interaction.guildId)) return interaction.reply({ content: 'هذه العملية للإدارة فقط.', flags: MessageFlags.Ephemeral });
+  if (parts[1] === 'content' && parts[2] === 'button-save') {
+    const label = interaction.fields.getTextInputValue('label').trim();
+    const emoji = interaction.fields.getTextInputValue('emoji').trim();
+    const destinationRaw = interaction.fields.getTextInputValue('destination').trim();
+    const destination = validPanelDestination(destinationRaw);
+    if (!label || label.length > 80) return interaction.reply({ content: 'اسم الزر مطلوب ويجب ألا يتجاوز 80 حرفاً.', flags: MessageFlags.Ephemeral });
+    if (emoji.length > 80 || !validPanelEmoji(emoji)) return interaction.reply({ content: 'الإيموجي غير صالح. استخدم إيموجياً عادياً أو إيموجياً مخصصاً من Discord، أو اترك الحقل فارغاً.', flags: MessageFlags.Ephemeral });
+    if (!destination) return interaction.reply({ content: 'الوجهة غير صالحة. استخدم صفحة مثل rules أو info أو roles، أو رابطاً يبدأ بـ https://.', flags: MessageFlags.Ephemeral });
+    const buttons = getMainPanelButtons(interaction.guildId);
+    const requestedId = parts[3];
+    const isNew = requestedId === 'new';
+    if (isNew && buttons.length >= 25) return interaction.reply({ content: 'وصلت إلى الحد الأقصى وهو 25 زرّاً.', flags: MessageFlags.Ephemeral });
+    let id = requestedId;
+    if (isNew) {
+      id = randomUUID().replace(/-/g, '').slice(0, 24);
+      buttons.push({ id, label, emoji, destination, enabled: true });
+    } else {
+      const existing = buttons.find((item) => item.id === requestedId);
+      if (!existing) return interaction.reply({ content: 'الزر المراد تعديله لم يعد موجوداً. أعد فتح إدارة الأزرار.', flags: MessageFlags.Ephemeral });
+      existing.label = label;
+      existing.emoji = emoji;
+      existing.destination = destination;
+    }
+    database.setConfig(interaction.guildId, 'main_panel_custom_buttons', JSON.stringify(buttons), interaction.user.id);
+    database.setConfig(interaction.guildId, 'main_panel_selected_button', id, interaction.user.id);
+    database.logAdmin(interaction.guildId, interaction.user.id, isNew ? 'main_panel_button_created' : 'main_panel_button_edited', JSON.stringify({ id, label, emoji, destination }));
+    const refreshed = await refreshPublishedMainPanel(interaction.guild).catch((error) => {
+      console.error('[ADMIN] Main panel refresh failed:', error.message);
+      return false;
+    });
+    return interaction.reply({
+      content: `✅ ${isNew ? 'تمت إضافة' : 'تم تعديل'} زر **${label}** بنجاح.${refreshed ? ' تم تحديث رسالة الترحيب المنشورة تلقائياً.' : ' استخدم زر نشر/تحديث اللوحة لتطبيق التغيير.'}`,
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('admin:content:back').setLabel('العودة لإدارة اللوحات والأزرار').setStyle(ButtonStyle.Primary))],
+      flags: MessageFlags.Ephemeral
+    });
+  }
   if (parts[1] === 'genie' && parts[2] === 'reward-save') {
     const amount = Number(interaction.fields.getTextInputValue('amount').trim());
     if (!Number.isSafeInteger(amount) || amount < 0 || amount > 100000) return interaction.reply({ content: 'أدخل قيمة بين 0 و100000 DOS Coin.', flags: MessageFlags.Ephemeral });

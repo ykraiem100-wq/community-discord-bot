@@ -16,6 +16,8 @@ const MAIN_PANEL_BUTTONS = Object.freeze([
   { key: 'arena', label: 'Arena', emoji: '🎮', action: 'arena' }
 ]);
 
+const PANEL_PAGE_TARGETS = Object.freeze(['rules', 'info', 'notifications', 'roles', 'system', 'events', 'social', 'apply', 'news']);
+
 function selectedMainPanelButtons(guildId) {
   const fallback = MAIN_PANEL_BUTTONS.map((item) => item.key);
   const raw = database.getConfig(guildId, 'main_panel_buttons', JSON.stringify(fallback));
@@ -27,6 +29,35 @@ function selectedMainPanelButtons(guildId) {
   } catch {
     return fallback;
   }
+}
+
+function getMainPanelButtons(guildId) {
+  const raw = database.getConfig(guildId, 'main_panel_custom_buttons', '');
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((item) => item && typeof item.id === 'string' && typeof item.label === 'string')
+          .slice(0, 25)
+          .map((item) => ({
+            id: item.id.slice(0, 32),
+            label: item.label.trim().slice(0, 80),
+            emoji: String(item.emoji || '').trim().slice(0, 80),
+            destination: String(item.destination || '').trim(),
+            enabled: item.enabled !== false
+          }))
+          .filter((item) => item.label && (PANEL_PAGE_TARGETS.includes(item.destination) || /^https:\/\//i.test(item.destination)));
+      }
+    } catch { /* migrate to safe defaults below */ }
+  }
+  const enabled = new Set(selectedMainPanelButtons(guildId));
+  return MAIN_PANEL_BUTTONS.map((item) => ({
+    id: item.key,
+    label: item.label,
+    emoji: item.emoji,
+    destination: item.key === 'arena' ? 'events' : item.action,
+    enabled: enabled.has(item.key)
+  }));
 }
 
 const CYAN = 0x36D9FF;
@@ -82,13 +113,16 @@ async function buildMainPanel(guild, guildId) {
   const owner = guild && guild.fetchOwner ? await guild.fetchOwner().catch(() => null) : null;
   const signature = owner ? `تحيات إدارة ${owner.displayName || owner.user.username}` : `تحيات إدارة ${guild.name}`;
   const image = await renderMainPanel({ guild, title: main.title, body: main.body, signature });
-  const selected = new Set(selectedMainPanelButtons(guildId));
-  const visibleButtons = MAIN_PANEL_BUTTONS.filter((item) => selected.has(item.key));
+  const visibleButtons = getMainPanelButtons(guildId).filter((item) => item.enabled).slice(0, 25);
   const components = [];
   for (let index = 0; index < visibleButtons.length; index += 5) {
-    const row = new ActionRowBuilder().addComponents(visibleButtons.slice(index, index + 5).map((item) =>
-      new ButtonBuilder().setCustomId(`public:${item.action}`).setLabel(item.label).setEmoji(item.emoji).setStyle(ButtonStyle.Secondary)
-    ));
+    const row = new ActionRowBuilder().addComponents(visibleButtons.slice(index, index + 5).map((item) => {
+      const button = new ButtonBuilder().setLabel(item.label).setStyle(/^https:\/\//i.test(item.destination) ? ButtonStyle.Link : ButtonStyle.Secondary);
+      if (item.emoji) { try { button.setEmoji(item.emoji); } catch { /* omit an invalid optional emoji */ } }
+      if (/^https:\/\//i.test(item.destination)) button.setURL(item.destination);
+      else button.setCustomId(`public:button:${item.id}`);
+      return button;
+    }));
     components.push(row);
   }
   const panelEmbed = new EmbedBuilder()
@@ -125,7 +159,14 @@ async function publishMainPanel(guild, channel) {
 }
 
 async function handlePublicPanelInteraction(interaction) {
-  const [scope, action] = interaction.customId.split(':');
+  const parts = interaction.customId.split(':');
+  const scope = parts[0];
+  let action = parts[1];
+  if (scope === 'public' && action === 'button') {
+    const button = getMainPanelButtons(interaction.guildId).find((item) => item.id === parts[2] && item.enabled);
+    if (!button || /^https:\/\//i.test(button.destination)) return interaction.reply({ content: 'هذا الزر غير متاح حالياً.', flags: MessageFlags.Ephemeral });
+    action = button.destination;
+  }
   if (!database.featureEnabled(interaction.guildId,'main_panel')) return interaction.reply({ content: 'اللوحة الرئيسية متوقفة حالياً.', flags: MessageFlags.Ephemeral });
   if (scope === 'public' && ['rules', 'info', 'system', 'events', 'arena', 'social', 'apply', 'news'].includes(action)) {
       if ((action === 'events' || action === 'arena') && !database.featureEnabled(interaction.guildId, 'events')) {
@@ -183,4 +224,4 @@ async function handlePublicPanelInteraction(interaction) {
   return false;
 }
 
-module.exports = { CYAN, DEFAULT_CONTENT, MAIN_PANEL_BUTTONS, selectedMainPanelButtons, content, makeContentEmbed, buildMainPanel, publishMainPanel, handlePublicPanelInteraction };
+module.exports = { CYAN, DEFAULT_CONTENT, MAIN_PANEL_BUTTONS, PANEL_PAGE_TARGETS, selectedMainPanelButtons, getMainPanelButtons, content, makeContentEmbed, buildMainPanel, publishMainPanel, handlePublicPanelInteraction };
